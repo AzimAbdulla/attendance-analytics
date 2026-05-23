@@ -1,0 +1,52 @@
+{
+ "chart_name": "Top 10 Employees by Performance",
+ "chart_type": "Report",
+ "color": "#7cd6fd",
+ "creation": "2026-05-21 16:09:10.544748",
+ "currency": "",
+ "docstatus": 0,
+ "doctype": "Dashboard Chart",
+ "filters_json": "{\"month\":\"05\",\"year\":\"2026\"}",
+ "group_by_type": "Count",
+ "idx": 0,
+ "is_public": 0,
+ "is_standard": 1,
+ "modified": "2026-05-22 10:39:47.187457",
+ "modified_by": "Administrator",
+ "module": "Attendance Analytics",
+ "name": "Top 10 Employees by Performance",
+ "number_of_groups": 0,
+ "owner": "Administrator",
+ "report_name": "Monthly Attendance Performance Report",
+ "roles": [],
+ "show_values_over_chart": 0,
+ "time_interval": "Yearly",
+ "timeseries": 0,
+ "timespan": "Last Year",
+ "type": "Bar",
+ "use_report_chart": 0,
+ "x_field": "employee_name",
+ "y_axis": [
+  {
+   "color": "#761ACB",
+   "y_field": "final_score"
+  },
+  {
+   "color": "#29CD42",
+   "y_field": "present_days"
+  },
+  {
+   "color": "#ff1500",
+   "y_field": "leave_days"
+  },
+  {
+   "color": "#964242",
+   "y_field": "absent_days"
+  },
+  {
+   "color": "#4F9DD9",
+   "y_field": "wfh_days"
+  },
+  {}
+ ]
+}

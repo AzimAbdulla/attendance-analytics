@@ -1,0 +1,35 @@
+{
+ "cards": [
+  {
+   "card": "Highest Score"
+  },
+  {
+   "card": "Average Score"
+  },
+  {
+   "card": "Lowest Score"
+  }
+ ],
+ "charts": [
+  {
+   "chart": "Employee Attendance Ranking",
+   "width": "Full"
+  },
+  {
+   "chart": "Monthly Attendance Performance Report",
+   "width": "Full"
+  }
+ ],
+ "creation": "2026-05-21 16:09:10.738621",
+ "dashboard_name": "Employee Performance Dashboard",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2026-05-22 12:22:59.391311",
+ "modified_by": "Administrator",
+ "module": "Attendance Analytics",
+ "name": "Employee Performance Dashboard",
+ "owner": "Administrator"
+}
