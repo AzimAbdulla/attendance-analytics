@@ -84,25 +84,23 @@ def get_data(filters):
         work_seconds = 0
         break_seconds = 0
         
-        if logs:
-            last_time = logs[0].time
-            last_type = logs[0].log_type
-            
-            for i in range(1, len(logs)):
-                current_log = logs[i]
-                duration = (current_log.time - last_time).total_seconds()
-                
-                # Strict sequential logic:
-                # IN -> OUT = Work
-                if last_type == "IN" and current_log.log_type == "OUT":
-                    work_seconds += duration
-                # OUT -> IN = Break
-                elif last_type == "OUT" and current_log.log_type == "IN":
-                    break_seconds += duration
-                
-                # Always update last markers (duplicate INs reset the start time)
-                last_time = current_log.time
-                last_type = current_log.log_type
+        # 1. Group consecutive logs of the same type into clusters
+        from itertools import groupby
+        clusters = []
+        for log_type, group in groupby(logs, key=lambda x: x.log_type):
+            clusters.append((log_type, list(group)))
+
+        # 2. Calculate Work Duration (First IN of cluster to Last OUT of next cluster)
+        for i in range(len(clusters) - 1):
+            if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT":
+                start_time = clusters[i][1][0].time
+                end_time = clusters[i+1][1][-1].time
+                work_seconds += (end_time - start_time).total_seconds()
+
+        # 3. Calculate Total Break Time (Total Span - Work Duration)
+        if len(logs) >= 2:
+            total_span = (logs[-1].time - logs[0].time).total_seconds()
+            break_seconds = max(total_span - work_seconds, 0)
 
         # Format durations
         work_duration = format_duration(work_seconds)
