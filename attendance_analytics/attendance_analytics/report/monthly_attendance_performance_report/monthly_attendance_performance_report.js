@@ -57,11 +57,23 @@ frappe.query_reports["Monthly Attendance Performance Report"] = {
 		options.showRowIndex = false;
 		options.serialNoColumn = false;
 		options.layout = "fluid";
+		
 		if (options.columns) {
 			options.columns[0].fixed = true; // Rank
-			options.columns[1].fixed = true; // Employee ID
-			options.columns[2].fixed = true; // Employee Name
+			options.columns[1].fixed = true; // Employee Name (linked)
 		}
+
+		const original_formatter = options.formatter;
+		options.formatter = (value, row, column, data) => {
+			if (column.id === 'employee' && data && data.employee_name) {
+				return `<a class="grey" href="/app/employee/${value}">${data.employee_name}</a>`;
+			}
+			if (original_formatter) {
+				return original_formatter(value, row, column, data);
+			}
+			return value;
+		};
+
 		return options;
 	}
 };
