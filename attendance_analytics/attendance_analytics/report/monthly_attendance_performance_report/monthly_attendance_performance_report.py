@@ -40,7 +40,7 @@ def get_columns():
     return [
         {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60, "fixed": 1},
         {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100, "fixed": 1},
-        {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160, "fixed": 1},
+        {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
         {"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Int", "width": 130},
         {"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Int", "width": 100},

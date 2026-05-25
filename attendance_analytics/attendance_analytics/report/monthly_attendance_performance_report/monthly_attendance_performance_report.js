@@ -61,7 +61,6 @@ frappe.query_reports["Monthly Attendance Performance Report"] = {
 		if (options.columns) {
 			options.columns[0].fixed = true; // Rank
 			options.columns[1].fixed = true; // Employee ID
-			options.columns[2].fixed = true; // Employee Name
 		}
 
 		return options;

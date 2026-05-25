@@ -30,7 +30,6 @@ frappe.query_reports["Daily Work Duration Report"] = {
 
 		if (options.columns) {
 			options.columns[0].fixed = true; // Employee ID
-			options.columns[1].fixed = true; // Employee Name
 		}
 
 		return options;
