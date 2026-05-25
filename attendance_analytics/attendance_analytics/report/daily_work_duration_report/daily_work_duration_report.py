@@ -78,6 +78,9 @@ def get_data(filters):
             continue
 
         logs = emp_logs.get(emp.name, [])
+        if not logs:
+            continue
+
         work_seconds = 0
         break_seconds = 0
         
