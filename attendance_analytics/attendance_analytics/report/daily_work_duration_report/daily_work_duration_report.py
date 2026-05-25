@@ -15,7 +15,7 @@ def execute(filters=None):
 
 def get_columns():
     return [
-        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100, "fixed": 1},
+        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100},
         {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 180},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 150},
         {"label": _("Work Duration"), "fieldname": "work_duration", "fieldtype": "Data", "width": 140},

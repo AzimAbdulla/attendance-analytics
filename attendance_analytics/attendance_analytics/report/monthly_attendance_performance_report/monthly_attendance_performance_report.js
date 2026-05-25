@@ -56,12 +56,7 @@ frappe.query_reports["Monthly Attendance Performance Report"] = {
 	"get_datatable_options": function(options) {
 		options.showRowIndex = false;
 		options.serialNoColumn = false;
-		options.layout = "fluid";
-		
-		if (options.columns) {
-			options.columns[0].fixed = true; // Rank
-			options.columns[1].fixed = true; // Employee ID
-		}
+		options.layout = "fixed";
 
 		return options;
 	}

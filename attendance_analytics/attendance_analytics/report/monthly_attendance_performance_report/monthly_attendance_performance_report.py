@@ -38,8 +38,8 @@ def get_chart(data):
 
 def get_columns():
     return [
-        {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60, "fixed": 1},
-        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100, "fixed": 1},
+        {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60},
+        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100},
         {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
         {"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Int", "width": 130},
@@ -201,13 +201,14 @@ def get_data(filters):
                            datetime.datetime.combine(datetime.date.min, office_start_time)
                     late_minutes = diff.total_seconds() / 60
                     
-                    stats["late_arrival_count"] += 1
-                    
-                    if late_minutes <= 60:
-                        score -= 1
-                    else:
-                        score -= 2
-                        stats["severe_late_count"] += 1
+                    if late_minutes > 10:
+                        stats["late_arrival_count"] += 1
+                        
+                        if late_minutes <= 60:
+                            score -= 1
+                        else:
+                            score -= 2
+                            stats["severe_late_count"] += 1
 
         # Repeated Lateness Penalties (using only Severe Late Arrivals)
         if stats["severe_late_count"] > 10:

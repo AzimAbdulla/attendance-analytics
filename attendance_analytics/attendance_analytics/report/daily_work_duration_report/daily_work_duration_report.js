@@ -26,11 +26,7 @@ frappe.query_reports["Daily Work Duration Report"] = {
 	"get_datatable_options": function(options) {
 		options.showRowIndex = false;
 		options.serialNoColumn = false;
-		options.layout = "fluid";
-
-		if (options.columns) {
-			options.columns[0].fixed = true; // Employee ID
-		}
+		options.layout = "fixed";
 
 		return options;
 	}
