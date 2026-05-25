@@ -65,8 +65,10 @@ frappe.query_reports["Monthly Attendance Performance Report"] = {
 
 		const original_formatter = options.formatter;
 		options.formatter = (value, row, column, data) => {
-			if (column.id === 'employee' && data && data.employee_name) {
-				return `<a class="grey" href="/app/employee/${value}">${data.employee_name}</a>`;
+			if (column.id === 'employee' || column.fieldname === 'employee') {
+				if (data && data.employee_name) {
+					return `<a href="/app/employee/${encodeURIComponent(data.employee)}">${data.employee_name}</a>`;
+				}
 			}
 			if (original_formatter) {
 				return original_formatter(value, row, column, data);
