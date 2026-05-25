@@ -39,7 +39,8 @@ def get_chart(data):
 def get_columns():
     return [
         {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60, "fixed": 1},
-        {"label": _("Employee Name"), "fieldname": "employee", "fieldtype": "Link", "options": "Employee", "width": 200, "fixed": 1},
+        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100, "fixed": 1},
+        {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160, "fixed": 1},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
         {"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Int", "width": 130},
         {"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Int", "width": 100},
@@ -230,8 +231,12 @@ def get_data(filters):
         if stats["total_working_days"] > 0:
             att_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / stats["total_working_days"] * 100
 
+        # Get numeric Employee ID if formatted as "36:Jino Thomas"
+        display_emp_id = str(emp.name).split(":")[0].strip()
+
         row = {
-            "employee": emp.name,
+            "employee": emp.name, # Hidden link reference if needed
+            "employee_id": display_emp_id,
             "employee_name": emp.employee_name,
             "department": emp.department,
             "total_working_days": stats["total_working_days"],
