@@ -3,13 +3,15 @@
 
 import frappe
 from frappe import _
+from attendance_analytics.attendance_analytics.report.monthly_attendance_performance_report.monthly_attendance_performance_report import get_settings
 
 def execute(filters=None):
     if not filters:
         filters = {}
 
+    settings = get_settings()
     columns = get_columns()
-    data = get_data(filters)
+    data = get_data(filters, settings)
     
     return columns, data
 
@@ -22,7 +24,7 @@ def get_columns():
         {"label": _("Break Duration"), "fieldname": "break_duration", "fieldtype": "Data", "width": 140},
     ]
 
-def get_data(filters):
+def get_data(filters, settings):
     date = filters.get("date")
     if not date:
         return []
@@ -64,18 +66,30 @@ def get_data(filters):
 
     report_data = []
 
+    # Prepare exclusion lists
+    excluded_branches = [b.branch for b in settings.excluded_branches]
+    excluded_employment_types = [t.employment_type for t in settings.excluded_employment_types]
+    id_pattern = (settings.excluded_id_pattern or "").upper()
+
     for emp in employees:
         # WFH Exclusion Logic
-        is_wfh_only = False
-        if emp.employee_number and "WFH" in str(emp.employee_number).upper():
-            is_wfh_only = True
-        elif emp.branch == "RIS - US":
-            is_wfh_only = True
-        elif emp.employment_type and "WFH" in str(emp.employment_type).upper():
-            is_wfh_only = True
+        if settings.enable_wfh_exclusion:
+            is_wfh_only = False
+            
+            # Check ID Pattern
+            if id_pattern and id_pattern in str(emp.employee_number or "").upper():
+                is_wfh_only = True
+            
+            # Check Branches
+            if not is_wfh_only and emp.branch in excluded_branches:
+                is_wfh_only = True
+                
+            # Check Employment Types
+            if not is_wfh_only and emp.employment_type in excluded_employment_types:
+                is_wfh_only = True
 
-        if is_wfh_only:
-            continue
+            if is_wfh_only:
+                continue
 
         logs = emp_logs.get(emp.name, [])
         if not logs:
@@ -104,7 +118,7 @@ def get_data(filters):
 
         # Format durations
         work_duration = format_duration(work_seconds)
-        break_duration = format_duration(break_seconds)
+        break_duration = format_duration(break_duration_seconds := break_seconds)
 
         # Get numeric Employee ID if formatted as "36:Jino Thomas"
         display_emp_id = str(emp.name).split(":")[0].strip()

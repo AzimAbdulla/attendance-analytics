@@ -237,6 +237,24 @@
    "fieldname": "enable_wfh_exclusion",
    "fieldtype": "Check",
    "label": "Enable WFH Exclusion"
+  },
+  {
+   "default": "WFH",
+   "fieldname": "excluded_id_pattern",
+   "fieldtype": "Data",
+   "label": "Excluded ID Pattern (e.g. WFH)"
+  },
+  {
+   "fieldname": "excluded_branches",
+   "fieldtype": "Table",
+   "label": "Excluded Branches",
+   "options": "Excluded Branch"
+  },
+  {
+   "fieldname": "excluded_employment_types",
+   "fieldtype": "Table",
+   "label": "Excluded Employment Types",
+   "options": "Excluded Employment Type"
   }
  ],
  "index_web_pages_for_search": 1,

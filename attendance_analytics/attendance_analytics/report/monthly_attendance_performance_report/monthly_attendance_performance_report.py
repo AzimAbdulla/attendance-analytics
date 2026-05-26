@@ -146,15 +146,26 @@ def get_data(filters, settings):
         "Leave Without Pay": settings.lwp_penalty
     }
 
+    # Prepare exclusion lists
+    excluded_branches = [b.branch for b in settings.excluded_branches]
+    excluded_employment_types = [t.employment_type for t in settings.excluded_employment_types]
+    id_pattern = (settings.excluded_id_pattern or "").upper()
+
     for emp in employees:
         # WFH Exclusion
         if settings.enable_wfh_exclusion:
             is_wfh_only = False
-            if emp.employee_number and "WFH" in str(emp.employee_number).upper():
+            
+            # Check ID Pattern
+            if id_pattern and id_pattern in str(emp.employee_number or "").upper():
                 is_wfh_only = True
-            elif emp.branch == "RIS - US":
+            
+            # Check Branches
+            if not is_wfh_only and emp.branch in excluded_branches:
                 is_wfh_only = True
-            elif emp.employment_type and "WFH" in str(emp.employment_type).upper():
+                
+            # Check Employment Types
+            if not is_wfh_only and emp.employment_type in excluded_employment_types:
                 is_wfh_only = True
 
             if is_wfh_only:
@@ -200,7 +211,7 @@ def get_data(filters, settings):
                 stats["absent_days"] += 1
                 score -= settings.absent_penalty
                 
-            # Biometric-based Scoring (Punctuality & Duration)
+            # Biometric-based Scoring
             if date_str in emp_checkins:
                 day_logs = emp_checkins[date_str]
                 first_log = day_logs[0]
@@ -240,11 +251,9 @@ def get_data(filters, settings):
                         span = (day_logs[-1].time - day_logs[0].time).total_seconds()
                         day_break_seconds = max(span - day_work_seconds, 0)
 
-                    # Work Bonus
                     if day_work_seconds >= (settings.work_target_hours * 3600):
                         score += settings.work_bonus
                     
-                    # Break Penalty
                     if day_break_seconds > (settings.break_threshold_hours * 3600):
                         score -= settings.break_penalty
 

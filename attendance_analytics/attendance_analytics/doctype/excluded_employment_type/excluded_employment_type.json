@@ -1,0 +1,34 @@
+{
+ "actions": [],
+ "allow_events_in_timeline": 0,
+ "allow_guest_to_view": 0,
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-05-23 14:00:00.000000",
+ "custom": 0,
+ "docstatus": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "employment_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Employment Type",
+   "options": "Employment Type",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "modified": "2026-05-23 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Attendance Analytics",
+ "name": "Excluded Employment Type",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
