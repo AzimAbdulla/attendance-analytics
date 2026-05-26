@@ -2,22 +2,39 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, add_days, get_datetime, now_datetime
 import datetime
+from itertools import groupby
 
 def execute(filters=None):
     if not filters:
         filters = {}
 
+    settings = get_settings()
     columns = get_columns()
-    data = get_data(filters)
+    data = get_data(filters, settings)
     chart = get_chart(data)
     
     return columns, data, None, chart
+
+def get_settings():
+    settings = frappe.get_doc("Attendance Performance Settings")
+    
+    # Convert time strings to objects
+    if isinstance(settings.office_start_time, str):
+        settings.office_start_time = datetime.datetime.strptime(settings.office_start_time, "%H:%M:%S").time()
+    elif isinstance(settings.office_start_time, datetime.timedelta):
+        settings.office_start_time = (datetime.datetime.min + settings.office_start_time).time()
+
+    if isinstance(settings.severe_late_threshold, str):
+        settings.severe_late_threshold = datetime.datetime.strptime(settings.severe_late_threshold, "%H:%M:%S").time()
+    elif isinstance(settings.severe_late_threshold, datetime.timedelta):
+        settings.severe_late_threshold = (datetime.datetime.min + settings.severe_late_threshold).time()
+
+    return settings
 
 def get_chart(data):
     if not data:
         return None
 
-    # Top 10 Scores (excluding WFH if they have no rank, or just top 10 from final data)
     top_10 = data[:10]
     
     chart = {
@@ -54,7 +71,7 @@ def get_columns():
         {"label": _("Final Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
     ]
 
-def get_data(filters):
+def get_data(filters, settings):
     month = filters.get("month")
     year = filters.get("year")
     
@@ -68,7 +85,6 @@ def get_data(filters):
     else:
         end_date = add_days(getdate(f"{year}-{int(month)+1}-01"), -1)
 
-    # Current date handling for partial month
     today = getdate(now_datetime())
     if end_date > today:
         end_date = today
@@ -90,7 +106,6 @@ def get_data(filters):
         fields=["employee", "attendance_date", "status", "leave_type"]
     )
     
-    # Map attendance by employee
     att_map = {}
     for att in attendance_records:
         if att.employee not in att_map:
@@ -109,7 +124,6 @@ def get_data(filters):
         order_by="time asc"
     )
     
-    # Map checkins by employee and date
     checkin_map = {}
     for checkin in checkin_records:
         date_str = str(checkin.time.date())
@@ -118,35 +132,33 @@ def get_data(filters):
             checkin_map[emp] = {}
         if date_str not in checkin_map[emp]:
             checkin_map[emp][date_str] = []
-        checkin_map[emp][date_str].append(checkin.time)
+        checkin_map[emp][date_str].append(checkin)
 
     report_data = []
     
-    office_start_str = "09:00:00"
-    office_start_time = datetime.datetime.strptime(office_start_str, "%H:%M:%S").time()
-
     leave_penalties = {
-        "Privilege Leave": 1,
-        "Sick Leave": 2,
-        "Casual Leave": 2,
-        "Maternity Leave": 0,
-        "Compensatory Off": 0,
-        "Holiday Duty": 0,
-        "Leave Without Pay": 5
+        "Privilege Leave": settings.privilege_leave_penalty,
+        "Sick Leave": settings.sick_leave_penalty,
+        "Casual Leave": settings.casual_leave_penalty,
+        "Maternity Leave": settings.maternity_leave_penalty,
+        "Compensatory Off": settings.comp_off_penalty,
+        "Holiday Duty": settings.holiday_duty_penalty,
+        "Leave Without Pay": settings.lwp_penalty
     }
 
     for emp in employees:
-        # Check if WFH employee based on Employee Number (ESSL), Branch, or Employment Type
-        is_wfh_only = False
-        if emp.employee_number and "WFH" in str(emp.employee_number).upper():
-            is_wfh_only = True
-        elif emp.branch == "RIS - US":
-            is_wfh_only = True
-        elif emp.employment_type and "WFH" in str(emp.employment_type).upper():
-            is_wfh_only = True
+        # WFH Exclusion
+        if settings.enable_wfh_exclusion:
+            is_wfh_only = False
+            if emp.employee_number and "WFH" in str(emp.employee_number).upper():
+                is_wfh_only = True
+            elif emp.branch == "RIS - US":
+                is_wfh_only = True
+            elif emp.employment_type and "WFH" in str(emp.employment_type).upper():
+                is_wfh_only = True
 
-        if is_wfh_only:
-            continue
+            if is_wfh_only:
+                continue
 
         emp_att = att_map.get(emp.name, [])
         emp_checkins = checkin_map.get(emp.name, {})
@@ -163,7 +175,7 @@ def get_data(filters):
             "severe_late_count": 0,
         }
         
-        score = 100.0
+        score = settings.base_score
         
         for att in emp_att:
             status = att.status
@@ -174,69 +186,93 @@ def get_data(filters):
                 stats["present_days"] += 1
             elif status == "Half Day":
                 stats["half_days"] += 1
-                score -= 3
+                score -= settings.half_day_penalty
             elif "Leave" in status:
                 stats["leave_days"] += 1
                 if att.leave_type == "Leave Without Pay":
                     stats["lwp_days"] += 1
-                penalty = leave_penalties.get(att.leave_type, 4)
+                penalty = leave_penalties.get(att.leave_type, settings.default_leave_penalty)
                 score -= penalty
             elif "Work From Home" in status or "WFH" in status:
                 stats["wfh_days"] += 1
-                score -= 2
+                score -= settings.wfh_status_penalty
             elif status == "Absent":
                 stats["absent_days"] += 1
-                score -= 6
+                score -= settings.absent_penalty
                 
-            # Punctuality Penalties (only if Present or Half Day or WFH?) 
-            # Usually only if they checked in.
+            # Biometric-based Scoring (Punctuality & Duration)
             if date_str in emp_checkins:
-                first_checkin = emp_checkins[date_str][0]
-                checkin_time = first_checkin.time()
+                day_logs = emp_checkins[date_str]
+                first_log = day_logs[0]
+                checkin_time = first_log.time.time()
                 
-                # Check punctuality
-                if checkin_time >= office_start_time:
-                    # Calculate minutes late
+                # 1. Punctuality
+                if checkin_time >= settings.office_start_time:
                     diff = datetime.datetime.combine(datetime.date.min, checkin_time) - \
-                           datetime.datetime.combine(datetime.date.min, office_start_time)
+                           datetime.datetime.combine(datetime.date.min, settings.office_start_time)
                     late_minutes = diff.total_seconds() / 60
                     
-                    if late_minutes > 10:
+                    if late_minutes > settings.late_grace_period:
                         stats["late_arrival_count"] += 1
                         
-                        if late_minutes <= 60:
-                            score -= 1
+                        if checkin_time <= settings.severe_late_threshold:
+                            score -= settings.standard_late_penalty
                         else:
-                            score -= 2
+                            score -= settings.severe_late_penalty
                             stats["severe_late_count"] += 1
 
-        # Repeated Lateness Penalties (using only Severe Late Arrivals)
-        if stats["severe_late_count"] > 10:
-            score -= 6
-        elif stats["severe_late_count"] > 5:
-            score -= 3
+                # 2. Optional Duration Scoring
+                if settings.enable_duration_scoring:
+                    day_work_seconds = 0
+                    day_break_seconds = 0
+                    
+                    day_clusters = []
+                    for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
+                        day_clusters.append((log_type, list(group)))
+                    
+                    for i in range(len(day_clusters) - 1):
+                        if day_clusters[i][0] == "IN" and day_clusters[i+1][0] == "OUT":
+                            start_t = day_clusters[i][1][0].time
+                            end_t = day_clusters[i+1][1][-1].time
+                            day_work_seconds += (end_t - start_t).total_seconds()
 
-        # Apply Rewards
-        if stats["total_working_days"] > 0:
+                    if len(day_logs) >= 2:
+                        span = (day_logs[-1].time - day_logs[0].time).total_seconds()
+                        day_break_seconds = max(span - day_work_seconds, 0)
+
+                    # Work Bonus
+                    if day_work_seconds >= (settings.work_target_hours * 3600):
+                        score += settings.work_bonus
+                    
+                    # Break Penalty
+                    if day_break_seconds > (settings.break_threshold_hours * 3600):
+                        score -= settings.break_penalty
+
+        # Habitual Penalties
+        if settings.enable_habitual_penalties:
+            if stats["severe_late_count"] > settings.habitual_threshold_2:
+                score -= settings.habitual_penalty_2
+            elif stats["severe_late_count"] > settings.habitual_threshold_1:
+                score -= settings.habitual_penalty_1
+
+        # Monthly Rewards
+        if settings.enable_rewards and stats["total_working_days"] > 0:
             if stats["late_arrival_count"] == 0:
-                score += 3
+                score += settings.punctuality_bonus
             
             if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0:
-                score += 5
+                score += settings.consistency_bonus
 
-        # Final Score clamping
         if score < 0: score = 0
         
-        # Attendance Percentage
         att_percentage = 0
         if stats["total_working_days"] > 0:
             att_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / stats["total_working_days"] * 100
 
-        # Get numeric Employee ID if formatted as "36:Jino Thomas"
         display_emp_id = str(emp.name).split(":")[0].strip()
 
         row = {
-            "employee": emp.name, # Hidden link reference if needed
+            "employee": emp.name,
             "employee_id": display_emp_id,
             "employee_name": emp.employee_name,
             "department": emp.department,
@@ -253,7 +289,6 @@ def get_data(filters):
         }
         report_data.append(row)
 
-    # Sorting and Ranking
     report_data.sort(key=lambda x: x["final_score"], reverse=True)
     
     final_data = []

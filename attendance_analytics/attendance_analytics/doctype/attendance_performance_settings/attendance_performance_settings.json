@@ -1,0 +1,267 @@
+{
+ "actions": [],
+ "allow_events_in_timeline": 0,
+ "allow_guest_to_view": 0,
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "Attendance Performance Settings",
+ "creation": "2026-05-23 13:30:00.000000",
+ "custom": 0,
+ "docstatus": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {
+   "fieldname": "base_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Base Scoring Settings"
+  },
+  {
+   "default": "100.0",
+   "fieldname": "base_score",
+   "fieldtype": "Float",
+   "label": "Base Monthly Score"
+  },
+  {
+   "default": "09:00:00",
+   "fieldname": "office_start_time",
+   "fieldtype": "Time",
+   "label": "Office Start Time"
+  },
+  {
+   "default": "10",
+   "fieldname": "late_grace_period",
+   "fieldtype": "Int",
+   "label": "Late Grace Period (Minutes)"
+  },
+  {
+   "default": "10:00:00",
+   "fieldname": "severe_late_threshold",
+   "fieldtype": "Time",
+   "label": "Severe Late Threshold"
+  },
+  {
+   "fieldname": "attendance_penalties_section",
+   "fieldtype": "Section Break",
+   "label": "Attendance & Status Penalties"
+  },
+  {
+   "default": "6.0",
+   "fieldname": "absent_penalty",
+   "fieldtype": "Float",
+   "label": "Absent Penalty"
+  },
+  {
+   "default": "3.0",
+   "fieldname": "half_day_penalty",
+   "fieldtype": "Float",
+   "label": "Half Day Penalty"
+  },
+  {
+   "default": "2.0",
+   "fieldname": "wfh_status_penalty",
+   "fieldtype": "Float",
+   "label": "WFH Status Penalty (Occasional Remote)"
+  },
+  {
+   "fieldname": "leave_penalties_section",
+   "fieldtype": "Section Break",
+   "label": "Leave Type Penalties"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "privilege_leave_penalty",
+   "fieldtype": "Float",
+   "label": "Privilege Leave"
+  },
+  {
+   "default": "2.0",
+   "fieldname": "sick_leave_penalty",
+   "fieldtype": "Float",
+   "label": "Sick Leave"
+  },
+  {
+   "default": "2.0",
+   "fieldname": "casual_leave_penalty",
+   "fieldtype": "Float",
+   "label": "Casual Leave"
+  },
+  {
+   "default": "5.0",
+   "fieldname": "lwp_penalty",
+   "fieldtype": "Float",
+   "label": "Leave Without Pay"
+  },
+  {
+   "default": "0.0",
+   "fieldname": "maternity_leave_penalty",
+   "fieldtype": "Float",
+   "label": "Maternity Leave"
+  },
+  {
+   "default": "0.0",
+   "fieldname": "comp_off_penalty",
+   "fieldtype": "Float",
+   "label": "Compensatory Off"
+  },
+  {
+   "default": "0.0",
+   "fieldname": "holiday_duty_penalty",
+   "fieldtype": "Float",
+   "label": "Holiday Duty"
+  },
+  {
+   "default": "4.0",
+   "fieldname": "default_leave_penalty",
+   "fieldtype": "Float",
+   "label": "Default Leave Penalty (Unrecognized)"
+  },
+  {
+   "fieldname": "punctuality_penalties_section",
+   "fieldtype": "Section Break",
+   "label": "Punctuality (Late) Penalties"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "standard_late_penalty",
+   "fieldtype": "Float",
+   "label": "Standard Late Penalty"
+  },
+  {
+   "default": "2.0",
+   "fieldname": "severe_late_penalty",
+   "fieldtype": "Float",
+   "label": "Severe Late Penalty"
+  },
+  {
+   "fieldname": "habitual_offender_section",
+   "fieldtype": "Section Break",
+   "label": "Habitual Severe Late Penalties"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_habitual_penalties",
+   "fieldtype": "Check",
+   "label": "Enable Habitual Offender Penalties"
+  },
+  {
+   "default": "5",
+   "fieldname": "habitual_threshold_1",
+   "fieldtype": "Int",
+   "label": "Threshold 1 (Instances)"
+  },
+  {
+   "default": "3.0",
+   "fieldname": "habitual_penalty_1",
+   "fieldtype": "Float",
+   "label": "Deduction 1"
+  },
+  {
+   "default": "10",
+   "fieldname": "habitual_threshold_2",
+   "fieldtype": "Int",
+   "label": "Threshold 2 (Instances)"
+  },
+  {
+   "default": "6.0",
+   "fieldname": "habitual_penalty_2",
+   "fieldtype": "Float",
+   "label": "Deduction 2"
+  },
+  {
+   "fieldname": "rewards_section",
+   "fieldtype": "Section Break",
+   "label": "Performance Rewards"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_rewards",
+   "fieldtype": "Check",
+   "label": "Enable Rewards/Bonuses"
+  },
+  {
+   "default": "3.0",
+   "fieldname": "punctuality_bonus",
+   "fieldtype": "Float",
+   "label": "Punctuality Bonus (No Lates)"
+  },
+  {
+   "default": "5.0",
+   "fieldname": "consistency_bonus",
+   "fieldtype": "Float",
+   "label": "Consistency Bonus (No Absent/Half/LWP)"
+  },
+  {
+   "fieldname": "duration_scoring_section",
+   "fieldtype": "Section Break",
+   "label": "Duration Scoring Modifiers"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_duration_scoring",
+   "fieldtype": "Check",
+   "label": "Enable Duration-based Modifiers"
+  },
+  {
+   "default": "8.0",
+   "fieldname": "work_target_hours",
+   "fieldtype": "Float",
+   "label": "Work Target (Hours)"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "work_bonus",
+   "fieldtype": "Float",
+   "label": "Work Bonus Points"
+  },
+  {
+   "default": "1.5",
+   "fieldname": "break_threshold_hours",
+   "fieldtype": "Float",
+   "label": "Break Threshold (Hours)"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "break_penalty",
+   "fieldtype": "Float",
+   "label": "Break Penalty Points"
+  },
+  {
+   "fieldname": "exclusion_section",
+   "fieldtype": "Section Break",
+   "label": "Exclusion Settings"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_wfh_exclusion",
+   "fieldtype": "Check",
+   "label": "Enable WFH Exclusion"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-05-23 13:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Attendance Analytics",
+ "name": "Attendance Performance Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
