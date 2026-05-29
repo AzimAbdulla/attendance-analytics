@@ -69,7 +69,8 @@ def get_columns():
         {"label": _("Late Arrival"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
         {"label": _("Severe Late"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
         {"label": _("Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
-        {"label": _("Trend"), "fieldname": "trend", "fieldtype": "Data", "width": 80},
+        {"label": _("Trend (Score)"), "fieldname": "trend", "fieldtype": "Data", "width": 110},
+        {"label": _("Trend (Rank)"), "fieldname": "rank_trend", "fieldtype": "Data", "width": 110},
     ]
 
 def get_data(filters, settings):
@@ -91,38 +92,47 @@ def get_data(filters, settings):
     employee_list = [e.name for e in employees]
     if not employee_list: return []
 
-    # Calculate Current Scores
-    curr_scores = calculate_scores(employee_list, curr_start, curr_end, settings, employees)
+    # Calculate Current Scores and Ranks
+    curr_results = calculate_scores_and_ranks(employee_list, curr_start, curr_end, settings, employees)
     
-    # Calculate Previous Scores
-    prev_scores = calculate_scores(employee_list, prev_start, prev_end, settings, employees)
+    # Calculate Previous Scores and Ranks
+    prev_results = calculate_scores_and_ranks(employee_list, prev_start, prev_end, settings, employees)
 
     report_data = []
-    for emp_id in curr_scores:
-        data = curr_scores[emp_id]
+    for emp_id in curr_results:
+        data = curr_results[emp_id]
         
-        # Calculate Trend
-        trend = "—"
-        if emp_id in prev_scores:
-            diff = data["final_score"] - prev_scores[emp_id]["final_score"]
+        # 1. Score Trend
+        trend = '<span style="color:grey">—</span>'
+        if emp_id in prev_results:
+            diff = data["final_score"] - prev_results[emp_id]["final_score"]
             if diff > 0.1:
                 trend = f'<span style="color:green">↑ +{round(diff, 1)}</span>'
             elif diff < -0.1:
                 trend = f'<span style="color:red">↓ {round(diff, 1)}</span>'
-            else:
-                trend = '<span style="color:grey">—</span>'
 
         data["trend"] = trend
+
+        # 2. Rank Trend (Climbed/Fallen number)
+        rank_trend = '<span style="color:grey">—</span>'
+        if emp_id in prev_results:
+            curr_rank = data["rank"]
+            prev_rank = prev_results[emp_id]["rank"]
+            
+            if curr_rank < prev_rank: # Improved rank
+                rank_trend = f'<span style="color:green">↑ {prev_rank - curr_rank}</span>'
+            elif curr_rank > prev_rank: # Dropped rank
+                rank_trend = f'<span style="color:red">↓ {curr_rank - prev_rank}</span>'
+        
+        data["rank_trend"] = rank_trend
         report_data.append(data)
 
-    report_data.sort(key=lambda x: x["final_score"], reverse=True)
-    
-    for i, r in enumerate(report_data):
-        r["rank"] = i + 1
+    # Sort final report by Rank
+    report_data.sort(key=lambda x: x["rank"])
 
     return report_data
 
-def calculate_scores(employee_list, start_date, end_date, settings, employees_meta):
+def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, employees_meta):
     attendance_records = frappe.get_all(
         "Attendance",
         filters={
@@ -171,7 +181,7 @@ def calculate_scores(employee_list, start_date, end_date, settings, employees_me
     excluded_employment_types = [t.employment_type for t in settings.excluded_employment_types]
     id_pattern = (settings.excluded_id_pattern or "").upper()
 
-    scores_map = {}
+    scores_list = []
 
     for emp in employees_meta:
         # WFH Exclusion
@@ -254,7 +264,7 @@ def calculate_scores(employee_list, start_date, end_date, settings, employees_me
         if stats["total_working_days"] > 0:
             att_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / stats["total_working_days"] * 100
 
-        scores_map[emp.name] = {
+        scores_list.append({
             "employee": emp.name,
             "employee_id": str(emp.name).split(":")[0].strip(),
             "employee_name": emp.employee_name,
@@ -269,9 +279,17 @@ def calculate_scores(employee_list, start_date, end_date, settings, employees_me
             "late_arrival_count": stats["late_arrival_count"],
             "severe_late_count": stats["severe_late_count"],
             "final_score": score,
-        }
+        })
 
-    return scores_map
+    # Rank the list
+    scores_list.sort(key=lambda x: x["final_score"], reverse=True)
+    
+    results_map = {}
+    for i, item in enumerate(scores_list):
+        item["rank"] = i + 1
+        results_map[item["employee"]] = item
+
+    return results_map
 
 def get_employees(filters):
     conditions = {"status": "Active"}
