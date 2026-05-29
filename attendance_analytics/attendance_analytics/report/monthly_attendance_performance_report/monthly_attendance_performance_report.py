@@ -1,6 +1,6 @@
 import frappe
 from frappe import _
-from frappe.utils import getdate, add_days, get_datetime, now_datetime
+from frappe.utils import getdate, add_days, get_datetime, now_datetime, add_months
 import datetime
 from itertools import groupby
 
@@ -56,46 +56,73 @@ def get_chart(data):
 def get_columns():
     return [
         {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60},
-        {"label": _("Employee ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100},
+        {"label": _("ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100},
         {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
         {"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Int", "width": 130},
-        {"label": _("Present Days"), "fieldname": "present_days", "fieldtype": "Int", "width": 100},
+        {"label": _("Present"), "fieldname": "present_days", "fieldtype": "Int", "width": 100},
         {"label": _("Half Days"), "fieldname": "half_days", "fieldtype": "Int", "width": 90},
-        {"label": _("Leave Days"), "fieldname": "leave_days", "fieldtype": "Int", "width": 90},
-        {"label": _("WFH Days"), "fieldname": "wfh_days", "fieldtype": "Int", "width": 90},
-        {"label": _("Absent Days"), "fieldname": "absent_days", "fieldtype": "Int", "width": 100},
+        {"label": _("Leave"), "fieldname": "leave_days", "fieldtype": "Int", "width": 90},
+        {"label": _("WFH"), "fieldname": "wfh_days", "fieldtype": "Int", "width": 90},
+        {"label": _("Absent"), "fieldname": "absent_days", "fieldtype": "Int", "width": 100},
         {"label": _("Attendance %"), "fieldname": "attendance_percentage", "fieldtype": "Percent", "width": 110},
-        {"label": _("Late Arrival Count"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
-        {"label": _("Severe Late Count"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
-        {"label": _("Final Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
+        {"label": _("Late Arrival"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
+        {"label": _("Severe Late"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
+        {"label": _("Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
+        {"label": _("Trend"), "fieldname": "trend", "fieldtype": "Data", "width": 80},
     ]
 
 def get_data(filters, settings):
     month = filters.get("month")
     year = filters.get("year")
-    
-    if not month or not year:
-        return []
+    if not month or not year: return []
 
-    # Get start and end dates
-    start_date = getdate(f"{year}-{month}-01")
-    if int(month) == 12:
-        end_date = add_days(getdate(f"{int(year)+1}-01-01"), -1)
-    else:
-        end_date = add_days(getdate(f"{year}-{int(month)+1}-01"), -1)
-
+    # Current Period
+    curr_start = getdate(f"{year}-{month}-01")
+    curr_end = add_days(add_months(curr_start, 1), -1)
     today = getdate(now_datetime())
-    if end_date > today:
-        end_date = today
+    if curr_end > today: curr_end = today
+
+    # Previous Period
+    prev_start = add_months(curr_start, -1)
+    prev_end = add_days(curr_start, -1)
 
     employees = get_employees(filters)
     employee_list = [e.name for e in employees]
-    
-    if not employee_list:
-        return []
+    if not employee_list: return []
 
-    # Fetch attendance
+    # Calculate Current Scores
+    curr_scores = calculate_scores(employee_list, curr_start, curr_end, settings, employees)
+    
+    # Calculate Previous Scores
+    prev_scores = calculate_scores(employee_list, prev_start, prev_end, settings, employees)
+
+    report_data = []
+    for emp_id in curr_scores:
+        data = curr_scores[emp_id]
+        
+        # Calculate Trend
+        trend = "—"
+        if emp_id in prev_scores:
+            diff = data["final_score"] - prev_scores[emp_id]["final_score"]
+            if diff > 0.1:
+                trend = f'<span style="color:green">↑ +{round(diff, 1)}</span>'
+            elif diff < -0.1:
+                trend = f'<span style="color:red">↓ {round(diff, 1)}</span>'
+            else:
+                trend = '<span style="color:grey">—</span>'
+
+        data["trend"] = trend
+        report_data.append(data)
+
+    report_data.sort(key=lambda x: x["final_score"], reverse=True)
+    
+    for i, r in enumerate(report_data):
+        r["rank"] = i + 1
+
+    return report_data
+
+def calculate_scores(employee_list, start_date, end_date, settings, employees_meta):
     attendance_records = frappe.get_all(
         "Attendance",
         filters={
@@ -108,11 +135,9 @@ def get_data(filters, settings):
     
     att_map = {}
     for att in attendance_records:
-        if att.employee not in att_map:
-            att_map[att.employee] = []
+        if att.employee not in att_map: att_map[att.employee] = []
         att_map[att.employee].append(att)
 
-    # Fetch checkins
     checkin_records = frappe.get_all(
         "Employee Checkin",
         filters={
@@ -128,14 +153,10 @@ def get_data(filters, settings):
     for checkin in checkin_records:
         date_str = str(checkin.time.date())
         emp = checkin.employee
-        if emp not in checkin_map:
-            checkin_map[emp] = {}
-        if date_str not in checkin_map[emp]:
-            checkin_map[emp][date_str] = []
+        if emp not in checkin_map: checkin_map[emp] = {}
+        if date_str not in checkin_map[emp]: checkin_map[emp][date_str] = []
         checkin_map[emp][date_str].append(checkin)
 
-    report_data = []
-    
     leave_penalties = {
         "Privilege Leave": settings.privilege_leave_penalty,
         "Sick Leave": settings.sick_leave_penalty,
@@ -146,44 +167,28 @@ def get_data(filters, settings):
         "Leave Without Pay": settings.lwp_penalty
     }
 
-    # Prepare exclusion lists
     excluded_branches = [b.branch for b in settings.excluded_branches]
     excluded_employment_types = [t.employment_type for t in settings.excluded_employment_types]
     id_pattern = (settings.excluded_id_pattern or "").upper()
 
-    for emp in employees:
+    scores_map = {}
+
+    for emp in employees_meta:
         # WFH Exclusion
         if settings.enable_wfh_exclusion:
             is_wfh_only = False
-            
-            # Check ID Pattern
-            if id_pattern and id_pattern in str(emp.employee_number or "").upper():
-                is_wfh_only = True
-            
-            # Check Branches
-            if not is_wfh_only and emp.branch in excluded_branches:
-                is_wfh_only = True
-                
-            # Check Employment Types
-            if not is_wfh_only and emp.employment_type in excluded_employment_types:
-                is_wfh_only = True
-
-            if is_wfh_only:
-                continue
+            if id_pattern and id_pattern in str(emp.employee_number or "").upper(): is_wfh_only = True
+            if not is_wfh_only and emp.branch in excluded_branches: is_wfh_only = True
+            if not is_wfh_only and emp.employment_type in excluded_employment_types: is_wfh_only = True
+            if is_wfh_only: continue
 
         emp_att = att_map.get(emp.name, [])
         emp_checkins = checkin_map.get(emp.name, {})
 
         stats = {
-            "present_days": 0,
-            "half_days": 0,
-            "leave_days": 0,
-            "wfh_days": 0,
-            "absent_days": 0,
-            "lwp_days": 0,
-            "total_working_days": len(emp_att),
-            "late_arrival_count": 0,
-            "severe_late_count": 0,
+            "present_days": 0, "half_days": 0, "leave_days": 0, "wfh_days": 0,
+            "absent_days": 0, "lwp_days": 0, "total_working_days": len(emp_att),
+            "late_arrival_count": 0, "severe_late_count": 0,
         }
         
         score = settings.base_score
@@ -192,18 +197,14 @@ def get_data(filters, settings):
             status = att.status
             date_str = str(att.attendance_date)
             
-            # Attendance Penalties
-            if status == "Present":
-                stats["present_days"] += 1
+            if status == "Present": stats["present_days"] += 1
             elif status == "Half Day":
                 stats["half_days"] += 1
                 score -= settings.half_day_penalty
             elif "Leave" in status:
                 stats["leave_days"] += 1
-                if att.leave_type == "Leave Without Pay":
-                    stats["lwp_days"] += 1
-                penalty = leave_penalties.get(att.leave_type, settings.default_leave_penalty)
-                score -= penalty
+                if att.leave_type == "Leave Without Pay": stats["lwp_days"] += 1
+                score -= leave_penalties.get(att.leave_type, settings.default_leave_penalty)
             elif "Work From Home" in status or "WFH" in status:
                 stats["wfh_days"] += 1
                 score -= settings.wfh_status_penalty
@@ -211,78 +212,51 @@ def get_data(filters, settings):
                 stats["absent_days"] += 1
                 score -= settings.absent_penalty
                 
-            # Biometric-based Scoring
             if date_str in emp_checkins:
                 day_logs = emp_checkins[date_str]
-                first_log = day_logs[0]
-                checkin_time = first_log.time.time()
+                checkin_time = day_logs[0].time.time()
                 
-                # 1. Punctuality
                 if checkin_time >= settings.office_start_time:
                     diff = datetime.datetime.combine(datetime.date.min, checkin_time) - \
                            datetime.datetime.combine(datetime.date.min, settings.office_start_time)
-                    late_minutes = diff.total_seconds() / 60
-                    
-                    if late_minutes > settings.late_grace_period:
+                    if (diff.total_seconds() / 60) > settings.late_grace_period:
                         stats["late_arrival_count"] += 1
-                        
-                        if checkin_time <= settings.severe_late_threshold:
-                            score -= settings.standard_late_penalty
+                        if checkin_time <= settings.severe_late_threshold: score -= settings.standard_late_penalty
                         else:
                             score -= settings.severe_late_penalty
                             stats["severe_late_count"] += 1
 
-                # 2. Optional Duration Scoring
                 if settings.enable_duration_scoring:
                     day_work_seconds = 0
-                    day_break_seconds = 0
-                    
                     day_clusters = []
                     for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
                         day_clusters.append((log_type, list(group)))
-                    
                     for i in range(len(day_clusters) - 1):
                         if day_clusters[i][0] == "IN" and day_clusters[i+1][0] == "OUT":
-                            start_t = day_clusters[i][1][0].time
-                            end_t = day_clusters[i+1][1][-1].time
-                            day_work_seconds += (end_t - start_t).total_seconds()
+                            day_work_seconds += (day_clusters[i+1][1][-1].time - day_clusters[i][1][0].time).total_seconds()
 
+                    if day_work_seconds >= (settings.work_target_hours * 3600): score += settings.work_bonus
                     if len(day_logs) >= 2:
                         span = (day_logs[-1].time - day_logs[0].time).total_seconds()
-                        day_break_seconds = max(span - day_work_seconds, 0)
+                        if (max(span - day_work_seconds, 0)) > (settings.break_threshold_hours * 3600):
+                            score -= settings.break_penalty
 
-                    if day_work_seconds >= (settings.work_target_hours * 3600):
-                        score += settings.work_bonus
-                    
-                    if day_break_seconds > (settings.break_threshold_hours * 3600):
-                        score -= settings.break_penalty
-
-        # Habitual Penalties
         if settings.enable_habitual_penalties:
-            if stats["severe_late_count"] > settings.habitual_threshold_2:
-                score -= settings.habitual_penalty_2
-            elif stats["severe_late_count"] > settings.habitual_threshold_1:
-                score -= settings.habitual_penalty_1
+            if stats["severe_late_count"] > settings.habitual_threshold_2: score -= settings.habitual_penalty_2
+            elif stats["severe_late_count"] > settings.habitual_threshold_1: score -= settings.habitual_penalty_1
 
-        # Monthly Rewards
         if settings.enable_rewards and stats["total_working_days"] > 0:
-            if stats["late_arrival_count"] == 0:
-                score += settings.punctuality_bonus
-            
-            if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0:
-                score += settings.consistency_bonus
+            if stats["late_arrival_count"] == 0: score += settings.punctuality_bonus
+            if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0: score += settings.consistency_bonus
 
-        if score < 0: score = 0
-        
+        score = max(score, 0)
         att_percentage = 0
         if stats["total_working_days"] > 0:
             att_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / stats["total_working_days"] * 100
 
-        display_emp_id = str(emp.name).split(":")[0].strip()
-
-        row = {
+        scores_map[emp.name] = {
             "employee": emp.name,
-            "employee_id": display_emp_id,
+            "employee_id": str(emp.name).split(":")[0].strip(),
             "employee_name": emp.employee_name,
             "department": emp.department,
             "total_working_days": stats["total_working_days"],
@@ -296,27 +270,14 @@ def get_data(filters, settings):
             "severe_late_count": stats["severe_late_count"],
             "final_score": score,
         }
-        report_data.append(row)
 
-    report_data.sort(key=lambda x: x["final_score"], reverse=True)
-    
-    final_data = []
-    rank = 1
-    for r in report_data:
-        r["rank"] = rank
-        final_data.append(r)
-        rank += 1
-
-    return final_data
+    return scores_map
 
 def get_employees(filters):
     conditions = {"status": "Active"}
-    if filters.get("department"):
-        conditions["department"] = filters.get("department")
-    if filters.get("branch"):
-        conditions["branch"] = filters.get("branch")
-    if filters.get("employee"):
-        conditions["name"] = filters.get("employee")
+    if filters.get("department"): conditions["department"] = filters.get("department")
+    if filters.get("branch"): conditions["branch"] = filters.get("branch")
+    if filters.get("employee"): conditions["name"] = filters.get("employee")
         
     return frappe.get_all(
         "Employee",
