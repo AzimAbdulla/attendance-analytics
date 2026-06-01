@@ -8,6 +8,7 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 			"label": __("Month"),
 			"fieldtype": "Select",
 			"options": "January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember",
+			"default": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getMonth()],
 			"reqd": 1
 		},
 		{
@@ -15,6 +16,7 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 			"label": __("Year"),
 			"fieldtype": "Select",
 			"options": "2024\n2025\n2026\n2027",
+			"default": frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getFullYear(),
 			"reqd": 1
 		},
 		{
@@ -24,27 +26,6 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 			"reqd": 1
 		}
 	],
-	"onload": function(report) {
-		const url_params = frappe.utils.get_query_params();
-		
-		let default_month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getMonth()];
-		let default_year = frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getFullYear();
-
-		let month = url_params.month || default_month;
-		let year = url_params.year || default_year;
-
-		// Small timeout ensures Frappe initializes filter controls before we set values
-		setTimeout(() => {
-			report.set_filter_value("month", month);
-			report.set_filter_value("year", year);
-			
-			if (url_params.employee) {
-				report.set_filter_value("employee", url_params.employee);
-			}
-			
-			report.refresh();
-		}, 100);
-	},
 	"get_datatable_options": function(options) {
 		options.showRowIndex = false;
 		options.serialNoColumn = false;
