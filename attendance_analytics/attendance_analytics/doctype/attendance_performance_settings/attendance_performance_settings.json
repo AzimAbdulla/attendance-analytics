@@ -228,6 +228,71 @@
    "label": "Break Penalty Points"
   },
   {
+   "fieldname": "compliance_scoring_section",
+   "fieldtype": "Section Break",
+   "label": "Work Hour Compliance Scoring"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_compliance_scoring",
+   "fieldtype": "Check",
+   "label": "Enable Compliance Scoring"
+  },
+  {
+   "default": "90.0",
+   "fieldname": "compliance_threshold_1",
+   "fieldtype": "Percent",
+   "label": "Threshold 1 (>= %)"
+  },
+  {
+   "default": "2.0",
+   "fieldname": "compliance_modifier_1",
+   "fieldtype": "Float",
+   "label": "Modifier 1 (>= 90%)"
+  },
+  {
+   "default": "80.0",
+   "fieldname": "compliance_threshold_2",
+   "fieldtype": "Percent",
+   "label": "Threshold 2 (>= %)"
+  },
+  {
+   "default": "1.0",
+   "fieldname": "compliance_modifier_2",
+   "fieldtype": "Float",
+   "label": "Modifier 2 (80% to <90%)"
+  },
+  {
+   "default": "70.0",
+   "fieldname": "compliance_threshold_3",
+   "fieldtype": "Percent",
+   "label": "Threshold 3 (>= %)"
+  },
+  {
+   "default": "0.0",
+   "fieldname": "compliance_modifier_3",
+   "fieldtype": "Float",
+   "label": "Modifier 3 (70% to <80%)"
+  },
+  {
+   "default": "60.0",
+   "fieldname": "compliance_threshold_4",
+   "fieldtype": "Percent",
+   "label": "Threshold 4 (>= %)"
+  },
+  {
+   "default": "-1.0",
+   "fieldname": "compliance_modifier_4",
+   "fieldtype": "Float",
+   "label": "Modifier 4 (60% to <70%)"
+  },
+  {
+   "default": "-3.0",
+   "fieldname": "compliance_modifier_5",
+   "fieldtype": "Float",
+   "label": "Modifier 5 (< 60%)"
+  },
+  {
    "fieldname": "exclusion_section",
    "fieldtype": "Section Break",
    "label": "Exclusion Settings"

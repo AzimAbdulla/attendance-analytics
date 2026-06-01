@@ -273,8 +273,6 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             if stats["late_arrival_count"] == 0: score += settings.punctuality_bonus
             if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0: score += settings.consistency_bonus
 
-        score = max(score, 0)
-        
         # Standard Attendance % calculation
         attendance_percentage = 0
         if standard_working_days > 0:
@@ -287,6 +285,21 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
         compliance_percentage = 0
         if expected_present_seconds > 0:
             compliance_percentage = (stats["actual_work_seconds"] / expected_present_seconds) * 100
+
+        # Work Hour Compliance Scoring
+        if getattr(settings, "enable_compliance_scoring", 0) and stats["present_days"] > 0:
+            if compliance_percentage >= getattr(settings, "compliance_threshold_1", 90.0):
+                score += getattr(settings, "compliance_modifier_1", 2.0)
+            elif compliance_percentage >= getattr(settings, "compliance_threshold_2", 80.0):
+                score += getattr(settings, "compliance_modifier_2", 1.0)
+            elif compliance_percentage >= getattr(settings, "compliance_threshold_3", 70.0):
+                score += getattr(settings, "compliance_modifier_3", 0.0)
+            elif compliance_percentage >= getattr(settings, "compliance_threshold_4", 60.0):
+                score += getattr(settings, "compliance_modifier_4", -1.0)
+            else:
+                score += getattr(settings, "compliance_modifier_5", -3.0)
+
+        score = max(score, 0)
 
         scores_list.append({
             "employee": emp.name,
