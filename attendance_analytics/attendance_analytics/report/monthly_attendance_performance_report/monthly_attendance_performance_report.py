@@ -84,19 +84,23 @@ def get_data(filters, settings):
     today = getdate(now_datetime())
     if curr_end > today: curr_end = today
 
+    # Standard Working Days for the month (based on Holiday List '2026' and Sundays)
+    standard_working_days = get_standard_working_days(curr_start, curr_end)
+
     # Previous Period
     prev_start = add_months(curr_start, -1)
     prev_end = add_days(curr_start, -1)
+    prev_standard_working_days = get_standard_working_days(prev_start, prev_end)
 
     employees = get_employees(filters)
     employee_list = [e.name for e in employees]
     if not employee_list: return []
 
     # Calculate Current Scores and Ranks
-    curr_results = calculate_scores_and_ranks(employee_list, curr_start, curr_end, settings, employees)
+    curr_results = calculate_scores_and_ranks(employee_list, curr_start, curr_end, settings, employees, standard_working_days)
     
     # Calculate Previous Scores and Ranks
-    prev_results = calculate_scores_and_ranks(employee_list, prev_start, prev_end, settings, employees)
+    prev_results = calculate_scores_and_ranks(employee_list, prev_start, prev_end, settings, employees, prev_standard_working_days)
 
     report_data = []
     for emp_id in curr_results:
@@ -132,7 +136,7 @@ def get_data(filters, settings):
 
     return report_data
 
-def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, employees_meta):
+def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, employees_meta, standard_working_days):
     attendance_records = frappe.get_all(
         "Attendance",
         filters={
@@ -260,22 +264,24 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0: score += settings.consistency_bonus
 
         score = max(score, 0)
-        att_percentage = 0
-        if stats["total_working_days"] > 0:
-            att_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / stats["total_working_days"] * 100
+        
+        # Standard Attendance % calculation: (Weighted Presence) / Standard Days
+        attendance_percentage = 0
+        if standard_working_days > 0:
+            attendance_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / standard_working_days * 100
 
         scores_list.append({
             "employee": emp.name,
             "employee_id": str(emp.name).split(":")[0].strip(),
             "employee_name": emp.employee_name,
             "department": emp.department,
-            "total_working_days": stats["total_working_days"],
+            "total_working_days": standard_working_days,
             "present_days": stats["present_days"],
             "half_days": stats["half_days"],
             "leave_days": stats["leave_days"],
             "wfh_days": stats["wfh_days"],
             "absent_days": stats["absent_days"],
-            "attendance_percentage": att_percentage,
+            "attendance_percentage": attendance_percentage,
             "late_arrival_count": stats["late_arrival_count"],
             "severe_late_count": stats["severe_late_count"],
             "final_score": score,
@@ -290,6 +296,32 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
         results_map[item["employee"]] = item
 
     return results_map
+
+def get_standard_working_days(start_date, end_date):
+    # Fetch Holidays from List '2026'
+    holidays = frappe.get_all('Holiday', 
+        filters={
+            'parent': '2026', 
+            'holiday_date': ['between', [start_date, end_date]]
+        }, 
+        fields=['holiday_date', 'weekly_off']
+    )
+    
+    holiday_dates = {h.holiday_date for h in holidays}
+    
+    working_days = 0
+    curr_date = getdate(start_date)
+    while curr_date <= getdate(end_date):
+        # Check if it's a Sunday (weekday 6) or in holiday list
+        is_holiday = curr_date in holiday_dates
+        is_sunday = curr_date.weekday() == 6
+        
+        if not is_holiday and not is_sunday:
+            working_days += 1
+            
+        curr_date = add_days(curr_date, 1)
+        
+    return working_days
 
 def get_employees(filters):
     conditions = {"status": "Active"}
