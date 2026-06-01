@@ -26,7 +26,7 @@ def get_columns():
     ]
 
 def get_data(filters):
-    employee = filters.get("employee")
+    emp_input = filters.get("employee")
     month_name = filters.get("month")
     year = filters.get("year")
 
@@ -39,11 +39,22 @@ def get_data(filters):
     start_date = getdate(f"{year}-{month}-01")
     end_date = add_days(add_months(start_date, 1), -1)
 
+    employee_id = emp_input
+    if emp_input:
+        employees = frappe.get_all("Employee", filters={"name": emp_input}, pluck="name")
+        if not employees:
+            employees = frappe.get_all("Employee", filters={"employee_name": ["like", f"%{emp_input}%"]}, pluck="name")
+        
+        if employees:
+            employee_id = employees[0]
+        else:
+            return []
+
     # Fetch checkins for the selected employee and month
     logs = frappe.get_all(
         "Employee Checkin",
         filters={
-            "employee": employee,
+            "employee": employee_id,
             "time": ["between", [get_datetime(f"{start_date} 00:00:00"), get_datetime(f"{end_date} 23:59:59")]],
             "skip_auto_attendance": 0
         },

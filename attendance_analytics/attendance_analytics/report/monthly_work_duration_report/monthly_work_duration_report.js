@@ -21,9 +21,8 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 		},
 		{
 			"fieldname": "employee",
-			"label": __("Employee"),
-			"fieldtype": "Link",
-			"options": "Employee",
+			"label": __("Employee Name"),
+			"fieldtype": "Data",
 			"reqd": 1
 		}
 	],
