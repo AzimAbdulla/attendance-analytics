@@ -1,3 +1,8 @@
+fixtures = [
+    {"doctype": "Attendance Performance Settings"},
+    {"doctype": "Workspace", "filters": [["name", "in", ["HR"]]]}
+]
+
 app_name = "attendance_analytics"
 app_title = "Attendance Analytics"
 app_publisher = "Azim Abdulla"

@@ -1,0 +1,56 @@
+[
+ {
+  "absent_penalty": 6.0,
+  "base_score": 100.0,
+  "break_penalty": 1.0,
+  "break_threshold_hours": 1.5,
+  "casual_leave_penalty": 2.0,
+  "comp_off_penalty": 0.0,
+  "consistency_bonus": 5.0,
+  "default_leave_penalty": 4.0,
+  "docstatus": 0,
+  "doctype": "Attendance Performance Settings",
+  "enable_duration_scoring": 1,
+  "enable_habitual_penalties": 1,
+  "enable_rewards": 1,
+  "enable_wfh_exclusion": 1,
+  "excluded_branches": [
+   {
+    "branch": "RIS - US",
+    "parent": "Attendance Performance Settings",
+    "parentfield": "excluded_branches",
+    "parenttype": "Attendance Performance Settings"
+   }
+  ],
+  "excluded_employment_types": [
+   {
+    "employment_type": "Full-time (WFH)",
+    "parent": "Attendance Performance Settings",
+    "parentfield": "excluded_employment_types",
+    "parenttype": "Attendance Performance Settings"
+   }
+  ],
+  "excluded_id_pattern": "WFH",
+  "habitual_penalty_1": 3.0,
+  "habitual_penalty_2": 6.0,
+  "habitual_threshold_1": 5,
+  "habitual_threshold_2": 10,
+  "half_day_penalty": 3.0,
+  "holiday_duty_penalty": 0.0,
+  "late_grace_period": 10,
+  "lwp_penalty": 5.0,
+  "maternity_leave_penalty": 0.0,
+  "modified": "2026-05-26 13:00:45.846277",
+  "name": "Attendance Performance Settings",
+  "office_start_time": "09:00:00",
+  "privilege_leave_penalty": 1.0,
+  "punctuality_bonus": 3.0,
+  "severe_late_penalty": 2.0,
+  "severe_late_threshold": "10:00:00",
+  "sick_leave_penalty": 2.0,
+  "standard_late_penalty": 1.0,
+  "wfh_status_penalty": 2.0,
+  "work_bonus": 1.0,
+  "work_target_hours": 8.0
+ }
+]
