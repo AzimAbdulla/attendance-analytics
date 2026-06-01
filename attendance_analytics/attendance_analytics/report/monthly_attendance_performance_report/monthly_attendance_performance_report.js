@@ -59,5 +59,33 @@ frappe.query_reports["Monthly Attendance Performance Report"] = {
 		options.layout = "fixed";
 
 		return options;
+	},
+	"formatter": function(value, row, column, data, default_formatter) {
+		value = default_formatter(value, row, column, data);
+
+		if (column.fieldname == "employee_name" && data && data.employee) {
+			const month_map = {
+				"01": "January", "02": "February", "03": "March", "04": "April",
+				"05": "May", "06": "June", "07": "July", "08": "August",
+				"09": "September", "10": "October", "11": "November", "12": "December"
+			};
+			
+			const employee = data.employee;
+
+			const onclick_action = `
+				const filters = frappe.query_report.get_filter_values();
+				const month_map = {'01':'January', '02':'February', '03':'March', '04':'April', '05':'May', '06':'June', '07':'July', '08':'August', '09':'September', '10':'October', '11':'November', '12':'December'};
+				frappe.route_options = {
+					'month': month_map[filters.month],
+					'year': filters.year,
+					'employee': '${employee}'
+				};
+				frappe.set_route('query-report', 'Monthly Work Duration Report');
+			`.replace(/\n/g, ' ');
+
+			value = `<a href="javascript:void(0)" onclick="${onclick_action}" class="grey" style="color:var(--text-color); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${value}</a>`;
+		}
+
+		return value;
 	}
 };
