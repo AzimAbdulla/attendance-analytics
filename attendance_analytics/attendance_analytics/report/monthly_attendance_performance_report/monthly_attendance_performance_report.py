@@ -65,10 +65,11 @@ def get_columns():
         {"label": _("Leave"), "fieldname": "leave_days", "fieldtype": "Int", "width": 90},
         {"label": _("WFH"), "fieldname": "wfh_days", "fieldtype": "Int", "width": 90},
         {"label": _("Absent"), "fieldname": "absent_days", "fieldtype": "Int", "width": 100},
+        {"label": _("Attendance %"), "fieldname": "attendance_percentage", "fieldtype": "Percent", "width": 110},
         {"label": _("Total Hours"), "fieldname": "expected_hours", "fieldtype": "Data", "width": 120},
         {"label": _("Exp. (Present)"), "fieldname": "expected_present_hours", "fieldtype": "Data", "width": 120},
         {"label": _("Actual Hours"), "fieldname": "actual_hours", "fieldtype": "Data", "width": 120},
-        {"label": _("Attendance %"), "fieldname": "attendance_percentage", "fieldtype": "Percent", "width": 110},
+        {"label": _("Compliance %"), "fieldname": "compliance_percentage", "fieldtype": "Percent", "width": 110},
         {"label": _("Late Arrival"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
         {"label": _("Severe Late"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
         {"label": _("Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
@@ -282,6 +283,10 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
         # Hour-based metrics
         expected_work_seconds = standard_working_days * 8 * 3600
         expected_present_seconds = stats["present_days"] * 8 * 3600
+        
+        compliance_percentage = 0
+        if expected_present_seconds > 0:
+            compliance_percentage = (stats["actual_work_seconds"] / expected_present_seconds) * 100
 
         scores_list.append({
             "employee": emp.name,
@@ -294,10 +299,11 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             "leave_days": stats["leave_days"],
             "wfh_days": stats["wfh_days"],
             "absent_days": stats["absent_days"],
+            "attendance_percentage": attendance_percentage,
             "expected_hours": format_duration_short(expected_work_seconds),
             "expected_present_hours": format_duration_short(expected_present_seconds),
             "actual_hours": format_duration_short(stats["actual_work_seconds"]),
-            "attendance_percentage": attendance_percentage,
+            "compliance_percentage": compliance_percentage,
             "late_arrival_count": stats["late_arrival_count"],
             "severe_late_count": stats["severe_late_count"],
             "final_score": score,
