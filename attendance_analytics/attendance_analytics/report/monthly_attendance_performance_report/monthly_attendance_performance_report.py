@@ -65,6 +65,9 @@ def get_columns():
         {"label": _("Leave"), "fieldname": "leave_days", "fieldtype": "Int", "width": 90},
         {"label": _("WFH"), "fieldname": "wfh_days", "fieldtype": "Int", "width": 90},
         {"label": _("Absent"), "fieldname": "absent_days", "fieldtype": "Int", "width": 100},
+        {"label": _("Total Hours"), "fieldname": "expected_hours", "fieldtype": "Data", "width": 120},
+        {"label": _("Exp. (Present)"), "fieldname": "expected_present_hours", "fieldtype": "Data", "width": 120},
+        {"label": _("Actual Hours"), "fieldname": "actual_hours", "fieldtype": "Data", "width": 120},
         {"label": _("Attendance %"), "fieldname": "attendance_percentage", "fieldtype": "Percent", "width": 110},
         {"label": _("Late Arrival"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
         {"label": _("Severe Late"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
@@ -203,6 +206,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             "present_days": 0, "half_days": 0, "leave_days": 0, "wfh_days": 0,
             "absent_days": 0, "lwp_days": 0, "total_working_days": len(emp_att),
             "late_arrival_count": 0, "severe_late_count": 0,
+            "actual_work_seconds": 0
         }
         
         score = settings.base_score
@@ -230,6 +234,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
                 day_logs = emp_checkins[date_str]
                 checkin_time = day_logs[0].time.time()
                 
+                # 1. Punctuality
                 if checkin_time >= settings.office_start_time:
                     diff = datetime.datetime.combine(datetime.date.min, checkin_time) - \
                            datetime.datetime.combine(datetime.date.min, settings.office_start_time)
@@ -240,15 +245,19 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
                             score -= settings.severe_late_penalty
                             stats["severe_late_count"] += 1
 
-                if settings.enable_duration_scoring:
-                    day_work_seconds = 0
-                    day_clusters = []
-                    for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
-                        day_clusters.append((log_type, list(group)))
-                    for i in range(len(day_clusters) - 1):
-                        if day_clusters[i][0] == "IN" and day_clusters[i+1][0] == "OUT":
-                            day_work_seconds += (day_clusters[i+1][1][-1].time - day_clusters[i][1][0].time).total_seconds()
+                # 2. Duration Logic (Always calculated to accumulate Actual Hours)
+                day_work_seconds = 0
+                day_clusters = []
+                for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
+                    day_clusters.append((log_type, list(group)))
+                for i in range(len(day_clusters) - 1):
+                    if day_clusters[i][0] == "IN" and day_clusters[i+1][0] == "OUT":
+                        day_work_seconds += (day_clusters[i+1][1][-1].time - day_clusters[i][1][0].time).total_seconds()
 
+                stats["actual_work_seconds"] += day_work_seconds
+
+                # Apply scoring only if enabled
+                if settings.enable_duration_scoring:
                     if day_work_seconds >= (settings.work_target_hours * 3600): score += settings.work_bonus
                     if len(day_logs) >= 2:
                         span = (day_logs[-1].time - day_logs[0].time).total_seconds()
@@ -265,10 +274,14 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
 
         score = max(score, 0)
         
-        # Standard Attendance % calculation: (Weighted Presence) / Standard Days
+        # Standard Attendance % calculation
         attendance_percentage = 0
         if standard_working_days > 0:
             attendance_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / standard_working_days * 100
+
+        # Hour-based metrics
+        expected_work_seconds = standard_working_days * 8 * 3600
+        expected_present_seconds = stats["present_days"] * 8 * 3600
 
         scores_list.append({
             "employee": emp.name,
@@ -281,6 +294,9 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             "leave_days": stats["leave_days"],
             "wfh_days": stats["wfh_days"],
             "absent_days": stats["absent_days"],
+            "expected_hours": format_duration_short(expected_work_seconds),
+            "expected_present_hours": format_duration_short(expected_present_seconds),
+            "actual_hours": format_duration_short(stats["actual_work_seconds"]),
             "attendance_percentage": attendance_percentage,
             "late_arrival_count": stats["late_arrival_count"],
             "severe_late_count": stats["severe_late_count"],
@@ -297,8 +313,14 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
 
     return results_map
 
+def format_duration_short(seconds):
+    if seconds <= 0:
+        return "0h 00m"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    return f"{h}h {m:02d}m"
+
 def get_standard_working_days(start_date, end_date):
-    # Fetch Holidays from List '2026'
     holidays = frappe.get_all('Holiday', 
         filters={
             'parent': '2026', 
@@ -306,21 +328,13 @@ def get_standard_working_days(start_date, end_date):
         }, 
         fields=['holiday_date', 'weekly_off']
     )
-    
     holiday_dates = {h.holiday_date for h in holidays}
-    
     working_days = 0
     curr_date = getdate(start_date)
     while curr_date <= getdate(end_date):
-        # Check if it's a Sunday (weekday 6) or in holiday list
-        is_holiday = curr_date in holiday_dates
-        is_sunday = curr_date.weekday() == 6
-        
-        if not is_holiday and not is_sunday:
+        if curr_date not in holiday_dates and curr_date.weekday() != 6:
             working_days += 1
-            
         curr_date = add_days(curr_date, 1)
-        
     return working_days
 
 def get_employees(filters):
