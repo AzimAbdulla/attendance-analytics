@@ -20,7 +20,7 @@ def execute(filters=None):
 
 def get_columns():
     return [
-        {"label": _("Date"), "fieldname": "date", "fieldtype": "Date", "width": 120},
+        {"label": _("Date"), "fieldname": "date", "fieldtype": "Data", "width": 120},
         {"label": _("Work Duration"), "fieldname": "work_duration", "fieldtype": "Data", "width": 140},
         {"label": _("Break Duration"), "fieldname": "break_duration", "fieldtype": "Data", "width": 140},
     ]
@@ -62,6 +62,16 @@ def get_data(filters):
         order_by="time asc"
     )
 
+    # Fetch holidays
+    holidays = frappe.get_all('Holiday', 
+        filters={
+            'parent': '2026', 
+            'holiday_date': ['between', [start_date, end_date]]
+        }, 
+        fields=['holiday_date']
+    )
+    holiday_dates = {str(h.holiday_date) for h in holidays}
+
     # Group logs by date
     daily_logs = {}
     for log in logs:
@@ -102,8 +112,12 @@ def get_data(filters):
             
             work_duration = format_duration_short(work_seconds)
 
+        display_date = date_str
+        if date_str in holiday_dates:
+            display_date = f"<span style='color:red; font-weight:bold;'>{date_str}</span>"
+
         report_data.append({
-            "date": curr_date,
+            "date": display_date,
             "work_duration": work_duration,
             "break_duration": break_duration
         })
