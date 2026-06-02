@@ -70,6 +70,7 @@ def get_columns():
         {"label": _("Exp. (Present)"), "fieldname": "expected_present_hours", "fieldtype": "Data", "width": 120},
         {"label": _("Actual Hours"), "fieldname": "actual_hours", "fieldtype": "Data", "width": 120},
         {"label": _("Compliance %"), "fieldname": "compliance_percentage", "fieldtype": "Percent", "width": 110},
+        {"label": _("Overall Work Hour %"), "fieldname": "overall_compliance_percentage", "fieldtype": "Percent", "width": 130},
         {"label": _("Late Arrival"), "fieldname": "late_arrival_count", "fieldtype": "Int", "width": 130},
         {"label": _("Severe Late"), "fieldname": "severe_late_count", "fieldtype": "Int", "width": 140},
         {"label": _("Score"), "fieldname": "final_score", "fieldtype": "Float", "width": 110},
@@ -286,6 +287,10 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
         if expected_present_seconds > 0:
             compliance_percentage = (stats["actual_work_seconds"] / expected_present_seconds) * 100
 
+        overall_compliance_percentage = 0
+        if expected_work_seconds > 0:
+            overall_compliance_percentage = (stats["actual_work_seconds"] / expected_work_seconds) * 100
+
         # Work Hour Compliance Scoring
         if getattr(settings, "enable_compliance_scoring", 0) and stats["present_days"] > 0:
             if compliance_percentage >= getattr(settings, "compliance_threshold_1", 90.0):
@@ -317,6 +322,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             "expected_present_hours": format_duration_short(expected_present_seconds),
             "actual_hours": format_duration_short(stats["actual_work_seconds"]),
             "compliance_percentage": compliance_percentage,
+            "overall_compliance_percentage": overall_compliance_percentage,
             "late_arrival_count": stats["late_arrival_count"],
             "severe_late_count": stats["severe_late_count"],
             "final_score": score,
