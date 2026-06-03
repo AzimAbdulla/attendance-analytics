@@ -21,6 +21,8 @@ def execute(filters=None):
 def get_columns():
     return [
         {"label": _("Date"), "fieldname": "date", "fieldtype": "Data", "width": 120},
+        {"label": _("First In"), "fieldname": "first_in", "fieldtype": "Time", "width": 110},
+        {"label": _("Last Out"), "fieldname": "last_out", "fieldtype": "Time", "width": 110},
         {"label": _("Work Duration"), "fieldname": "work_duration", "fieldtype": "Data", "width": 140},
         {"label": _("Break Duration"), "fieldname": "break_duration", "fieldtype": "Data", "width": 140},
     ]
@@ -90,8 +92,12 @@ def get_data(filters):
         
         work_duration = "0h 00m"
         break_duration = "0h 00m"
+        first_in = None
+        last_out = None
 
         if day_logs:
+            first_in = day_logs[0].time.time()
+            last_out = day_logs[-1].time.time()
             work_seconds = 0
             
             # 1. Group consecutive logs into clusters
@@ -118,6 +124,8 @@ def get_data(filters):
 
         report_data.append({
             "date": display_date,
+            "first_in": first_in,
+            "last_out": last_out,
             "work_duration": work_duration,
             "break_duration": break_duration
         })
