@@ -56,7 +56,6 @@ def get_chart(data):
 def get_columns():
     return [
         {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60},
-        {"label": _("ID"), "fieldname": "employee_id", "fieldtype": "Data", "width": 100},
         {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160},
         {"label": _("Department"), "fieldname": "department", "fieldtype": "Link", "options": "Department", "width": 140},
         {"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Int", "width": 130},
