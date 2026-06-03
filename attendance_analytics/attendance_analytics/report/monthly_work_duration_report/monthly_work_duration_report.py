@@ -14,10 +14,10 @@ def execute(filters=None):
         return [], []
 
     columns = get_columns()
-    data = get_data(filters)
+    data, summary = get_data(filters)
     chart = get_chart(data)
 
-    return columns, data, None, chart
+    return columns, data, None, chart, summary
 
 def get_chart(data):
     if not data:
@@ -58,7 +58,12 @@ def get_chart(data):
             ]
         },
         "type": "line",
-        "colors": ["#7cd6fd"],
+        "colors": ["#3498db"],
+        "lineOptions": {
+            "regionFill": 1,
+            "hideDots": 0,
+            "strokeWidth": 3
+        },
         "axisOptions": {
             "xIsSeries": 1,
             "yAxisMode": "tick",
@@ -103,7 +108,7 @@ def get_data(filters):
         if employees:
             employee_id = employees[0]
         else:
-            return []
+            return [], []
 
     # Fetch checkins for the selected employee and month
     logs = frappe.get_all(
@@ -146,7 +151,20 @@ def get_data(filters):
             daily_logs[date_str] = []
         daily_logs[date_str].append(log)
 
+    # Fetch all active leave types to pre-initialize summary
+    all_leave_types = frappe.get_all("Leave Type", pluck="name")
+
     report_data = []
+    
+    # Initialize Summary Counters with all standard categories
+    counts = {
+        "Present": 0,
+        "Absent": 0,
+        "Half Day": 0,
+        "Work From Home": 0,
+        "On Leave": 0
+    }
+    leave_type_counts = {lt: 0 for lt in all_leave_types}
 
     # Iterate through each day of the month in chronological order
     curr_date = start_date
@@ -157,6 +175,17 @@ def get_data(filters):
         
         status = att_row.status if att_row else ""
         leave_type = att_row.leave_type if att_row else ""
+
+        # Update Summary Counts
+        if status:
+            if status in counts:
+                counts[status] += 1
+            elif "Work From Home" in status or "WFH" in status:
+                counts["Work From Home"] += 1
+            elif "Leave" in status:
+                counts["On Leave"] += 1
+                if leave_type in leave_type_counts:
+                    leave_type_counts[leave_type] += 1
 
         work_duration = "0h 00m"
         break_duration = "0h 00m"
@@ -205,7 +234,17 @@ def get_data(filters):
 
         curr_date = add_days(curr_date, 1)
 
-    return report_data
+    # Build report summary list
+    summary = []
+    summary.append({"label": _("Present"), "value": counts["Present"], "indicator": "green", "datatype": "Int"})
+    summary.append({"label": _("Absent"), "value": counts["Absent"], "indicator": "red", "datatype": "Int"})
+    summary.append({"label": _("Half Day"), "value": counts["Half Day"], "indicator": "orange", "datatype": "Int"})
+    summary.append({"label": _("WFH"), "value": counts["Work From Home"], "indicator": "blue", "datatype": "Int"})
+    
+    for lt, count in leave_type_counts.items():
+        summary.append({"label": _(lt), "value": count, "indicator": "grey", "datatype": "Int"})
+
+    return report_data, summary
 
 def format_duration_short(seconds):
     if seconds <= 0:
