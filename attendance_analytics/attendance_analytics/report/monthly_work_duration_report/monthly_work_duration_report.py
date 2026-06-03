@@ -23,14 +23,17 @@ def get_chart(data):
     if not data:
         return None
 
-    # Filter out styled HTML from dates for chart labels
+    # Filter out styled HTML and extract just the Day for legibility
     labels = []
     for d in data:
         date_str = d["date"]
         if "<span" in str(date_str):
             # Extract date from span: <span ...>2026-01-01</span>
             date_str = date_str.split(">")[1].split("<")[0]
-        labels.append(date_str)
+        
+        # Use just the day number (YYYY-MM-DD -> DD)
+        day_label = date_str.split("-")[-1]
+        labels.append(day_label)
 
     def get_hours(duration_str):
         # Format is "Xh Ym"
@@ -42,7 +45,7 @@ def get_chart(data):
         except:
             return 0
 
-    values = [get_hours(d["work_duration"]) for d in data]
+    values = [min(get_hours(d["work_duration"]), 15.0) for d in data]
 
     chart = {
         "data": {
@@ -55,7 +58,12 @@ def get_chart(data):
             ]
         },
         "type": "line",
-        "colors": ["#7cd6fd"]
+        "colors": ["#7cd6fd"],
+        "axisOptions": {
+            "xIsSeries": 1,
+            "yAxisMode": "tick",
+            "maxValue": 15
+        }
     }
 
     return chart
