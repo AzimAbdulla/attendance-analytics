@@ -23,6 +23,7 @@ def get_columns():
         {"label": _("Date"), "fieldname": "date", "fieldtype": "Data", "width": 120},
         {"label": _("First In"), "fieldname": "first_in", "fieldtype": "Time", "width": 110},
         {"label": _("Last Out"), "fieldname": "last_out", "fieldtype": "Time", "width": 110},
+        {"label": _("Span Duration"), "fieldname": "span_duration", "fieldtype": "Data", "width": 140},
         {"label": _("Work Duration"), "fieldname": "work_duration", "fieldtype": "Data", "width": 140},
         {"label": _("Break Duration"), "fieldname": "break_duration", "fieldtype": "Data", "width": 140},
     ]
@@ -92,6 +93,7 @@ def get_data(filters):
         
         work_duration = "0h 00m"
         break_duration = "0h 00m"
+        span_duration = "0h 00m"
         first_in = None
         last_out = None
 
@@ -110,10 +112,11 @@ def get_data(filters):
                 if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT":
                     work_seconds += (clusters[i+1][1][-1].time - clusters[i][1][0].time).total_seconds()
 
-            # 3. Calculate Total Break Time (Span - Work Duration)
+            # 3. Calculate Total Span and Break Time
             if len(day_logs) >= 2:
-                span = (day_logs[-1].time - day_logs[0].time).total_seconds()
-                break_seconds = max(span - work_seconds, 0)
+                span_seconds = (day_logs[-1].time - day_logs[0].time).total_seconds()
+                span_duration = format_duration_short(span_seconds)
+                break_seconds = max(span_seconds - work_seconds, 0)
                 break_duration = format_duration_short(break_seconds)
             
             work_duration = format_duration_short(work_seconds)
@@ -126,6 +129,7 @@ def get_data(filters):
             "date": display_date,
             "first_in": first_in,
             "last_out": last_out,
+            "span_duration": span_duration,
             "work_duration": work_duration,
             "break_duration": break_duration
         })
