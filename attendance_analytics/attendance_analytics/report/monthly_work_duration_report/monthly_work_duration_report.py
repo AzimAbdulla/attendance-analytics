@@ -15,12 +15,56 @@ def execute(filters=None):
 
     columns = get_columns()
     data = get_data(filters)
-    
-    return columns, data
+    chart = get_chart(data)
+
+    return columns, data, None, chart
+
+def get_chart(data):
+    if not data:
+        return None
+
+    # Filter out styled HTML from dates for chart labels
+    labels = []
+    for d in data:
+        date_str = d["date"]
+        if "<span" in str(date_str):
+            # Extract date from span: <span ...>2026-01-01</span>
+            date_str = date_str.split(">")[1].split("<")[0]
+        labels.append(date_str)
+
+    def get_hours(duration_str):
+        # Format is "Xh Ym"
+        try:
+            parts = duration_str.split(" ")
+            h = float(parts[0].replace("h", ""))
+            m = float(parts[1].replace("m", ""))
+            return round(h + (m / 60.0), 2)
+        except:
+            return 0
+
+    values = [get_hours(d["work_duration"]) for d in data]
+
+    chart = {
+        "data": {
+            "labels": labels,
+            "datasets": [
+                {
+                    "name": _("Work Duration (Hours)"),
+                    "values": values
+                }
+            ]
+        },
+        "type": "line",
+        "colors": ["#7cd6fd"]
+    }
+
+    return chart
 
 def get_columns():
     return [
         {"label": _("Date"), "fieldname": "date", "fieldtype": "Data", "width": 120},
+        {"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 120},
+        {"label": _("Leave Type"), "fieldname": "leave_type", "fieldtype": "Data", "width": 140},
         {"label": _("First In"), "fieldname": "first_in", "fieldtype": "Time", "width": 110},
         {"label": _("Last Out"), "fieldname": "last_out", "fieldtype": "Time", "width": 110},
         {"label": _("Span Duration"), "fieldname": "span_duration", "fieldtype": "Data", "width": 140},
@@ -75,6 +119,17 @@ def get_data(filters):
     )
     holiday_dates = {str(h.holiday_date) for h in holidays}
 
+    # Fetch attendance
+    attendance = frappe.get_all("Attendance",
+        filters={
+            "employee": employee_id,
+            "attendance_date": ["between", [start_date, end_date]],
+            "docstatus": 1
+        },
+        fields=["attendance_date", "status", "leave_type"]
+    )
+    att_map = {str(a.attendance_date): a for a in attendance}
+
     # Group logs by date
     daily_logs = {}
     for log in logs:
@@ -90,7 +145,11 @@ def get_data(filters):
     while curr_date <= end_date:
         date_str = str(curr_date)
         day_logs = daily_logs.get(date_str, [])
+        att_row = att_map.get(date_str)
         
+        status = att_row.status if att_row else ""
+        leave_type = att_row.leave_type if att_row else ""
+
         work_duration = "0h 00m"
         break_duration = "0h 00m"
         span_duration = "0h 00m"
@@ -127,6 +186,8 @@ def get_data(filters):
 
         report_data.append({
             "date": display_date,
+            "status": status,
+            "leave_type": leave_type,
             "first_in": first_in,
             "last_out": last_out,
             "span_duration": span_duration,
