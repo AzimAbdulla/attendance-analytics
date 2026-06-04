@@ -178,11 +178,14 @@ def get_data(filters):
 
         # Update Summary Counts
         if status:
-            if status in counts:
-                counts[status] += 1
+            if status == "Present": counts["Present"] += 1
+            elif status == "Absent": counts["Absent"] += 1
+            elif status == "Half Day": counts["Half Day"] += 1
             elif "Work From Home" in status or "WFH" in status:
                 counts["Work From Home"] += 1
-            elif "Leave" in status:
+            
+            # Independent check for Leaves
+            if "Leave" in status:
                 counts["On Leave"] += 1
                 if leave_type in leave_type_counts:
                     leave_type_counts[leave_type] += 1

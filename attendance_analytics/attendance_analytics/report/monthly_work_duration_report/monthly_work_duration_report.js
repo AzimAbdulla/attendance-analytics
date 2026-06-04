@@ -34,55 +34,74 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 		return options;
 	},
 	"onload": function(report) {
-		// Use a slight delay to ensure the container is fully initialized in the DOM
-		setTimeout(() => {
-			if (frappe.query_report && frappe.query_report.container) {
-				frappe.query_report.container.addClass("duration-report-container");
-			}
-		}, 100);
-
+		// Modern Elevated Card Styling
 		frappe.dom.set_style(`
-			.duration-report-container .report-summary {
+			.duration-report-cards .report-summary {
 				display: flex !important;
 				flex-wrap: wrap !important;
-				gap: 12px !important;
-				padding: 10px 0 30px 0 !important;
-				height: auto !important;
-				overflow: visible !important;
+				gap: 16px !important;
+				padding: 20px 0 40px 0 !important;
+				background-color: transparent !important;
+				border: none !important;
 			}
-			.duration-report-container .summary-item {
+			.duration-report-cards .summary-item {
 				background-color: var(--card-bg, #fff) !important;
-				border: 1px solid var(--border-color, #d1d8dd) !important;
-				border-radius: var(--border-radius-md, 8px) !important;
-				padding: 12px 15px !important;
-				min-width: 145px;
-				height: auto !important;
-				box-shadow: var(--card-shadow, 0 1px 3px rgba(0,0,0,0.1)) !important;
-				flex: 1;
-				display: flex;
-				flex-direction: column; 
-				align-items: flex-start;
+				border: 1px solid var(--border-color, #f0f0f0) !important;
+				border-bottom: 4px solid #d1d8dd !important; /* Bottom accent */
+				border-radius: 10px !important;
+				padding: 20px !important;
+				min-width: 170px !important;
+				flex: 0 1 auto !important;
+				box-shadow: 0 4px 10px rgba(0,0,0,0.05) !important;
+				display: flex !important;
+				flex-direction: column !important;
+				align-items: flex-start !important;
+				justify-content: center !important;
 				margin: 0 !important;
+				transition: all 0.3s ease !important;
 			}
-			.duration-report-container .summary-label {
-				font-size: 10px !important;
-				text-transform: uppercase;
-				font-weight: 600;
-				color: var(--text-muted, #687178);
-				margin-bottom: 6px !important;
+			.duration-report-cards .summary-item:hover {
+				box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
+				transform: translateY(-3px) !important;
 			}
-			.duration-report-container .summary-value {
-				font-size: 1.5rem !important;
+			.duration-report-cards .summary-label {
+				order: 1 !important;
+				font-size: 11px !important;
+				text-transform: uppercase !important;
 				font-weight: 700 !important;
+				letter-spacing: 0.05em !important;
+				color: var(--text-muted, #8d99ae) !important;
+				margin-bottom: 10px !important;
+				line-height: 1 !important;
+			}
+			.duration-report-cards .summary-value {
+				order: 2 !important;
+				font-size: 2.2rem !important;
+				font-weight: 900 !important;
 				line-height: 1 !important;
 				display: block !important;
 			}
-			/* Theme-safe High Specificity Colors for Numbers */
-			.duration-report-container div.summary-item.indicator-green span.summary-value { color: #28a745 !important; }
-			.duration-report-container div.summary-item.indicator-red span.summary-value { color: #dc3545 !important; }
-			.duration-report-container div.summary-item.indicator-orange span.summary-value { color: #fd7e14 !important; }
-			.duration-report-container div.summary-item.indicator-blue span.summary-value { color: #3498db !important; }
-			.duration-report-container div.summary-item.indicator-grey span.summary-value { color: #6c757d !important; }
+			/* Vibrant Theme Colors for Cards */
+			.duration-report-cards .summary-item.indicator-green { border-bottom-color: #2ecc71 !important; }
+			.duration-report-cards .summary-item.indicator-green .summary-value { color: #27ae60 !important; }
+			
+			.duration-report-cards .summary-item.indicator-red { border-bottom-color: #e74c3c !important; }
+			.duration-report-cards .summary-item.indicator-red .summary-value { color: #c0392b !important; }
+			
+			.duration-report-cards .summary-item.indicator-orange { border-bottom-color: #f39c12 !important; }
+			.duration-report-cards .summary-item.indicator-orange .summary-value { color: #d35400 !important; }
+			
+			.duration-report-cards .summary-item.indicator-blue { border-bottom-color: #3498db !important; }
+			.duration-report-cards .summary-item.indicator-blue .summary-value { color: #2980b9 !important; }
+			
+			.duration-report-cards .summary-item.indicator-grey { border-bottom-color: #95a5a6 !important; }
+			.duration-report-cards .summary-item.indicator-grey .summary-value { color: #7f8c8d !important; }
 		`);
+	},
+	"after_datatable_render": function(report) {
+		// Ensure the report container has the custom class for styling
+		if (report.container) {
+			$(report.container).addClass("duration-report-cards");
+		}
 	}
 };
