@@ -128,5 +128,14 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 			div[data-report-name="Monthly Work Duration Report"] .summary-item.indicator-blue .summary-value { color: #007bff !important; }
 			div[data-report-name="Monthly Work Duration Report"] .summary-item.indicator-grey .summary-value { color: #6c757d !important; }
 		`);
+	},
+	"formatter": function(value, row, column, data, default_formatter) {
+		value = default_formatter(value, row, column, data);
+
+		if (column.fieldname === "work_duration" && value && value !== "0h 00m") {
+			value = `<span style="color: #28a745; font-weight: bold;">${value}</span>`;
+		}
+
+		return value;
 	}
 };

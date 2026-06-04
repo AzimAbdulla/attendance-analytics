@@ -151,9 +151,32 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 			value = "<strong>" + value + "</strong>";
 		}
 
+		if (column.fieldname === "employee_name" && data && data.employee) {
+			const employee = data.employee_name;
+
+			const onclick_action = `
+				const filters = frappe.query_report.get_filter_values();
+				const month_map = {
+					1: 'January', 2: 'February', 3: 'March', 4: 'April', 
+					5: 'May', 6: 'June', 7: 'July', 8: 'August', 
+					9: 'September', 10: 'October', 11: 'November', 12: 'December'
+				};
+				frappe.route_options = {
+					'month': month_map[filters.month],
+					'year': filters.year,
+					'employee': '${employee.replace(/'/g, "\\'")}'
+				};
+				frappe.set_route('query-report', 'Monthly Work Duration Report');
+			`.replace(/\n/g, ' ');
+
+			value = `<a href="javascript:void(0)" onclick="${onclick_action}" class="grey" style="color:var(--text-color); text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${value}</a>`;
+		}
+
 		if (!summarized_view) {
 			// Check if this is a date column (fieldname is DD-MM-YYYY)
 			if (column.fieldname && column.fieldname.includes("-")) {
+				const raw_value = data[column.fieldname];
+				
 				// Check for tooltip details
 				let tooltip = "";
 				if (data && data._details && data._details[column.fieldname]) {
@@ -161,17 +184,18 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				}
 
 				let style = "";
-				if (value == "HD/P") style = "color:#914EE3";
-				else if (value == "HD/A") style = "color:orange";
-				else if (value == "P" || value == "WFH") style = "color:green";
-				else if (value == "A") style = "color:red";
-				else if (value && (value == "L" || value.startsWith("L("))) style = "color:#318AD8";
+				if (raw_value == "HD/P") style = "color:#914EE3";
+				else if (raw_value == "HD/A") style = "color:orange";
+				else if (raw_value == "P" || raw_value == "WFH") style = "color:green";
+				else if (raw_value == "A") style = "color:red";
+				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) style = "color:#318AD8";
 				else style = "color:#878787";
 
-				if (tooltip) {
-					value = `<span title="${tooltip}" style="${style}; cursor:help; font-weight:bold;">${value}</span>`;
+				// Force a native browser tooltip for "P" cells if we have details
+				if (tooltip && raw_value === "P") {
+					value = `<span title="${tooltip}" style="${style}; cursor:help; font-weight:bold; display:inline-block; width:100%; text-align:center;">${raw_value}</span>`;
 				} else if (style) {
-					value = `<span style="${style}">${value}</span>`;
+					value = `<span style="${style}; display:inline-block; width:100%; text-align:center;">${raw_value || ""}</span>`;
 				}
 			}
 		}
