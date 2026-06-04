@@ -45,6 +45,43 @@ frappe.query_reports["Monthly Work Duration Report"] = {
 
 		return options;
 	},
+	"get_chart_options": function(options) {
+		options.tooltipOptions = {
+			formatTooltipX: (label) => {
+				if (!frappe.query_report.data) return label;
+
+				const row = frappe.query_report.data.find(d => {
+					let d_date = d.date;
+					if (d_date.includes("<span")) d_date = $(d_date).text();
+					return d_date.endsWith("-" + label);
+				});
+
+				if (row) {
+					let pure_date = row.date;
+					if (pure_date.includes("<span")) pure_date = $(pure_date).text();
+					
+					let header = `Date: ${pure_date}`;
+					let details = "";
+
+					const status = row.status || "";
+					if (status === "On Leave" || status.includes("Leave")) {
+						details = `Status: Leave<br>Leave Type: ${row.leave_type || "N/A"}`;
+					} else if (status === "Absent") {
+						details = `Status: Absent`;
+					} else if (status === "Holiday" || status === "Weekly Off") {
+						details = `Status: ${status}`;
+					} else if (status.includes("Present") || status.includes("WFH") || status.includes("Home") || status.includes("Half Day")) {
+						details = `Work Duration: ${row.work_duration}<br>Break Duration: ${row.break_duration}`;
+					}
+					
+					return details ? `${header}<br>${details}` : header;
+				}
+				return label;
+			},
+			formatTooltipY: (value) => value + "h"
+		};
+		return options;
+	},
 	"onload": function(report) {
 		// Static Dashboard Card Design (No Interactivity)
 		frappe.dom.set_style(`

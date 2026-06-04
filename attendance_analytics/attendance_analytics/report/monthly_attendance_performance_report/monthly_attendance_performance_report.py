@@ -48,7 +48,10 @@ def get_chart(data):
             ]
         },
         "type": "bar",
-        "colors": ["#7cd6fd"]
+        "colors": ["#3498db"],
+        "axisOptions": {
+            "xIsSeries": 1
+        }
     }
     
     return chart

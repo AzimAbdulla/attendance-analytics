@@ -176,6 +176,10 @@ def get_data(filters):
         status = att_row.status if att_row else ""
         leave_type = att_row.leave_type if att_row else ""
 
+        # Set Holiday status if no attendance record exists
+        if not status and date_str in holiday_dates:
+            status = "Holiday"
+
         # Update Summary Counts
         if status:
             if status == "Present": counts["Present"] += 1
