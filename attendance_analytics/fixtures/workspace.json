@@ -381,6 +381,24 @@
     "type": "Link"
    },
    {
+    "dependencies": "Employee Checkin",
+    "description": null,
+    "hidden": 0,
+    "icon": null,
+    "is_query_report": 0,
+    "label": "Work Duration Dashboard",
+    "link_count": 0,
+    "link_to": "work_duration_dashboard",
+    "link_type": "Page",
+    "onboard": 0,
+    "only_for": null,
+    "parent": "HR",
+    "parentfield": "links",
+    "parenttype": "Workspace",
+    "report_ref_doctype": null,
+    "type": "Link"
+   },
+   {
     "dependencies": "Employee",
     "description": null,
     "hidden": 0,
