@@ -237,6 +237,29 @@ def get_data(filters):
 
         curr_date = add_days(curr_date, 1)
 
+    # Apply Filters to the table data
+    status_filter = filters.get("status")
+    lt_filter = filters.get("leave_type")
+
+    if status_filter or lt_filter:
+        filtered_data = []
+        for row in report_data:
+            match = True
+            if status_filter:
+                if status_filter == "On Leave":
+                    if "Leave" not in row["status"]: match = False
+                elif status_filter == "Work From Home":
+                    if row["status"] not in ["Work From Home", "WFH"]: match = False
+                elif row["status"] != status_filter:
+                    match = False
+            
+            if match and lt_filter:
+                if row["leave_type"] != lt_filter: match = False
+            
+            if match:
+                filtered_data.append(row)
+        report_data = filtered_data
+
     # Build report summary list
     summary = []
     summary.append({"label": _("Present"), "value": counts["Present"], "indicator": "green", "datatype": "Int"})
