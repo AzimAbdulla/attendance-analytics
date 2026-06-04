@@ -1,4 +1,4 @@
-frappe.pages['work_duration_dashboard'].on_page_load = function(wrapper) {
+frappe.pages['work-duration-dashboard'].on_page_load = function(wrapper) {
 	var page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: 'Work Duration Dashboard',
@@ -6,38 +6,37 @@ frappe.pages['work_duration_dashboard'].on_page_load = function(wrapper) {
 	});
 
 	// 1. Add Filters
-	page.add_field({
+	page.employee_field = page.add_field({
 		fieldname: 'employee',
 		label: __('Employee'),
 		fieldtype: 'Link',
 		options: 'Employee',
-		reqd: 1,
-		change: () => refresh_dashboard(page)
+		change: () => refresh_dashboard(page, wrapper)
 	});
 
-	page.add_field({
+	page.month_field = page.add_field({
 		fieldname: 'month',
 		label: __('Month'),
 		fieldtype: 'Select',
 		options: "January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember",
-		default: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"][frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getMonth()],
-		change: () => refresh_dashboard(page)
+		default: moment().format("MMMM"),
+		change: () => refresh_dashboard(page, wrapper)
 	});
 
-	page.add_field({
+	page.year_field = page.add_field({
 		fieldname: 'year',
 		label: __('Year'),
 		fieldtype: 'Select',
 		options: "2024\n2025\n2026\n2027",
-		default: frappe.datetime.str_to_obj(frappe.datetime.nowdate()).getFullYear(),
-		change: () => refresh_dashboard(page)
+		default: moment().format("YYYY"),
+		change: () => refresh_dashboard(page, wrapper)
 	});
 
 	// 2. Dashboard Containers
 	const $content = $(wrapper).find(".layout-main-section");
-	$content.append(`
+	$content.empty().append(`
 		<div id="dashboard-summary" style="display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 30px;"></div>
-		<div id="dashboard-chart" style="margin-bottom: 40px; background: var(--card-bg, #fff); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color);"></div>
+		<div id="dashboard-chart" style="margin-bottom: 40px; background: var(--card-bg, #fff); padding: 20px; border-radius: 8px; border: 1px solid var(--border-color); min-height: 200px;"></div>
 		<div id="dashboard-table-container">
 			<div id="dashboard-table"></div>
 		</div>
@@ -51,12 +50,13 @@ frappe.pages['work_duration_dashboard'].on_page_load = function(wrapper) {
 			border-bottom: 4px solid #d1d8dd;
 			border-radius: 10px;
 			padding: 15px 20px;
-			min-width: 150px;
+			min-width: 160px;
 			flex: 1;
 			box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 			display: flex;
 			flex-direction: column;
 			align-items: flex-start;
+			margin-bottom: 10px;
 		}
 		.dash-card-label {
 			font-size: 10px;
@@ -70,30 +70,42 @@ frappe.pages['work_duration_dashboard'].on_page_load = function(wrapper) {
 			font-weight: 900;
 			line-height: 1;
 		}
-		.dash-green { border-bottom-color: #2ecc71 !important; color: #27ae60; }
-		.dash-red { border-bottom-color: #e74c3c !important; color: #c0392b; }
-		.dash-orange { border-bottom-color: #f39c12 !important; color: #d35400; }
-		.dash-blue { border-bottom-color: #3498db !important; color: #2980b9; }
-		.dash-grey { border-bottom-color: #95a5a6 !important; color: #7f8c8d; }
+		.dash-green { border-bottom-color: #2ecc71 !important; }
+		.dash-green .dash-card-value { color: #27ae60; }
+		
+		.dash-red { border-bottom-color: #e74c3c !important; }
+		.dash-red .dash-card-value { color: #c0392b; }
+		
+		.dash-orange { border-bottom-color: #f39c12 !important; }
+		.dash-orange .dash-card-value { color: #d35400; }
+		
+		.dash-blue { border-bottom-color: #3498db !important; }
+		.dash-blue .dash-card-value { color: #2980b9; }
+		
+		.dash-grey { border-bottom-color: #95a5a6 !important; }
+		.dash-grey .dash-card-value { color: #7f8c8d; }
 	`);
 
 	// Auto-load if coming from report (route options)
 	if (frappe.route_options && frappe.route_options.employee) {
-		page.fields_dict.employee.set_value(frappe.route_options.employee);
-		page.fields_dict.month.set_value(frappe.route_options.month);
-		page.fields_dict.year.set_value(frappe.route_options.year);
+		page.employee_field.set_value(frappe.route_options.employee);
+		page.month_field.set_value(frappe.route_options.month);
+		page.year_field.set_value(frappe.route_options.year);
 		frappe.route_options = null;
 	}
 
-	refresh_dashboard(page);
+	refresh_dashboard(page, wrapper);
 };
 
-function refresh_dashboard(page) {
-	const employee = page.fields_dict.employee.get_value();
-	const month = page.fields_dict.month.get_value();
-	const year = page.fields_dict.year.get_value();
+function refresh_dashboard(page, wrapper) {
+	const employee = page.employee_field.get_value();
+	const month = page.month_field.get_value();
+	const year = page.year_field.get_value();
 
-	if (!employee) return;
+	if (!employee) {
+		$(wrapper).find("#dashboard-summary").html('<div class="text-muted" style="padding: 20px;">Please select an employee to view the dashboard.</div>');
+		return;
+	}
 
 	frappe.call({
 		method: "attendance_analytics.attendance_analytics.page.work_duration_dashboard.work_duration_dashboard.get_dashboard_data",
@@ -140,6 +152,7 @@ function render_cards(data) {
 }
 
 function render_chart(chart_data) {
+	$("#dashboard-chart").empty();
 	new frappe.Chart("#dashboard-chart", {
 		title: "Daily Work Duration (Hours)",
 		data: {
@@ -147,7 +160,7 @@ function render_chart(chart_data) {
 			datasets: [{ values: chart_data.values }]
 		},
 		type: 'line',
-		height: 250,
+		height: 200,
 		colors: ['#3498db'],
 		lineOptions: { regionFill: 1, strokeWidth: 3 },
 		axisOptions: { xIsSeries: 1, maxValue: 15 }
@@ -155,6 +168,7 @@ function render_chart(chart_data) {
 }
 
 function render_table(report_data) {
+	$("#dashboard-table").empty();
 	const columns = [
 		{ id: 'date', name: 'Date', width: 120 },
 		{ id: 'status', name: 'Status', width: 120 },
@@ -164,7 +178,7 @@ function render_table(report_data) {
 		{ id: 'work_hours', name: 'Work Duration', width: 130 }
 	];
 
-	const datatable = new frappe.DataTable("#dashboard-table", {
+	new frappe.DataTable("#dashboard-table", {
 		columns: columns,
 		data: report_data,
 		layout: 'fixed',
