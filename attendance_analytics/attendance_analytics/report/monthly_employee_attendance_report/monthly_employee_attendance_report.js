@@ -128,6 +128,24 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 			label: __("Summarized View"),
 			fieldtype: "Check",
 			default: 0,
+			on_change: (report) => {
+				if (report.get_filter_value("summarized_view")) {
+					report.set_filter_value("duration_view", 0);
+				}
+				report.refresh();
+			}
+		},
+		{
+			fieldname: "duration_view",
+			label: __("Duration View"),
+			fieldtype: "Check",
+			default: 0,
+			on_change: (report) => {
+				if (report.get_filter_value("duration_view")) {
+					report.set_filter_value("summarized_view", 0);
+				}
+				report.refresh();
+			},
 		},
 	],
 	onload: function () {
@@ -176,6 +194,7 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 			// Check if this is a date column (fieldname is DD-MM-YYYY)
 			if (column.fieldname && column.fieldname.includes("-")) {
 				const raw_value = data[column.fieldname];
+				const duration_view = frappe.query_report.get_filter_value("duration_view");
 				
 				// Check for tooltip details
 				let tooltip = "";
@@ -184,16 +203,26 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				}
 
 				let style = "";
+				const status = data._status_map ? data._status_map[column.fieldname] : "";
+				
 				if (raw_value == "HD/P") style = "color:#914EE3";
-				else if (raw_value == "HD/A") style = "color:orange";
+				else if (raw_value == "HD/A" || raw_value == "HD") style = "color:#f1c40f"; // Yellow
 				else if (raw_value == "P" || raw_value == "WFH") style = "color:green";
 				else if (raw_value == "A") style = "color:red";
 				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) style = "color:#318AD8";
+				else if (duration_view && raw_value && raw_value.includes("h ")) {
+					if (status && status.includes("Half Day")) {
+						style = "color:#f1c40f; font-weight:bold;"; // HD Duration -> Yellow
+					} else {
+						style = "color:#43a047; font-weight:bold;"; // Regular Duration -> Lighter Green
+					}
+				}
 				else style = "color:#878787";
 
-				// Force a native browser tooltip for "P" cells if we have details
-				if (tooltip && raw_value === "P") {
-					value = `<span title="${tooltip}" style="${style}; cursor:help; font-weight:bold; display:inline-block; width:100%; text-align:center;">${raw_value}</span>`;
+				// Show tooltips for "P" or any duration value
+				const is_duration = duration_view && raw_value && raw_value.includes("h ");
+				if (tooltip && (raw_value === "P" || is_duration)) {
+					value = `<span title="${tooltip}" style="${style}; cursor:help; display:inline-block; width:100%; text-align:center;">${raw_value}</span>`;
 				} else if (style) {
 					value = `<span style="${style}; display:inline-block; width:100%; text-align:center;">${raw_value || ""}</span>`;
 				}

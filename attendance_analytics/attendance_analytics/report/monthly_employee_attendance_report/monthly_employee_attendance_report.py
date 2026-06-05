@@ -76,7 +76,7 @@ def execute(filters: Filters | None = None) -> tuple:
 		frappe.msgprint(_("No attendance records found."), alert=True, indicator="orange")
 		return [], [], None, None
 
-	# Fetch Checkin logs for tooltips
+	# Fetch Checkin logs for tooltips and duration view
 	checkin_map = get_checkin_map(filters)
 	leave_details_map = get_leave_details_map(filters)
 
@@ -97,15 +97,19 @@ def get_checkin_map(filters):
 	"""Returns a map of checkins: { employee: { date: [logs] } }"""
 	start_date, end_date = get_report_date_range(filters)
 	
+	conditions = {
+		"time": ["between", [get_datetime(f"{start_date} 00:00:00"), get_datetime(f"{end_date} 23:59:59")]],
+		"skip_auto_attendance": 0
+	}
+	if filters.employee:
+		conditions["employee"] = filters.employee
+	
 	logs = frappe.get_all(
 		"Employee Checkin",
-		filters={
-			"time": ["between", [get_datetime(f"{start_date} 00:00:00"), get_datetime(f"{end_date} 23:59:59")]],
-			"docstatus": 1,
-			"skip_auto_attendance": 0
-		},
+		filters=conditions,
 		fields=["employee", "time", "log_type"],
-		order_by="time asc"
+		order_by="time asc",
+		limit=0
 	)
 	
 	checkin_map = {}
@@ -554,7 +558,8 @@ def get_attendance_summary_and_days(employee, filters):
 
 def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map) -> dict:
 	total_days = get_dates_in_period(filters)
-	row = {"_details": {}}
+	row = {"_details": {}, "_status_map": {}}
+	duration_view = cint(filters.get("duration_view"))
 	
 	for d in total_days:
 		d = getdate(d)
@@ -565,6 +570,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 		if status is None and holidays:
 			status = get_holiday_status(d, holidays)
 
+		row["_status_map"][date_str] = status
 		abbr = status_map.get(status, "")
 		
 		if status == "On Leave" and leave_details_map:
@@ -572,16 +578,17 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 			if lt:
 				abbr = f"{abbr}({lt})"
 		
-		row[date_str] = abbr
-
-		# Tooltip Info
+		# Tooltip Info & Duration Calculation
 		tooltip_info = []
+		work_duration_str = "0h 00m"
 		day_logs = emp_checkins.get(db_date_str, [])
+		
 		if day_logs:
-			first_in = day_logs[0].time.strftime("%H:%M")
-			last_out = day_logs[-1].time.strftime("%H:%M")
-			tooltip_info.append(f"IN: {first_in}")
-			tooltip_info.append(f"OUT: {last_out}")
+			first_in_dt = day_logs[0].time
+			last_out_dt = day_logs[-1].time
+			
+			tooltip_info.append(f"IN: {first_in_dt.strftime('%H:%M')}")
+			tooltip_info.append(f"OUT: {last_out_dt.strftime('%H:%M')}")
 			
 			work_seconds = 0
 			clusters = []
@@ -591,8 +598,13 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 				if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT":
 					work_seconds += (clusters[i+1][1][-1].time - clusters[i][1][0].time).total_seconds()
 			
+			# Robust Fallback: If clustered logic gives 0 but they are Present, use Span
+			if work_seconds <= 0 and status in ["Present", "Work From Home", "Half Day/Other Half Present", "Half Day/Other Half Absent", "Half Day"]:
+				work_seconds = (last_out_dt - first_in_dt).total_seconds()
+
 			if work_seconds > 0:
-				tooltip_info.append(f"Work: {int(work_seconds//3600)}h {int((work_seconds%3600)//60):02d}m")
+				work_duration_str = f"{int(work_seconds//3600)}h {int((work_seconds%3600)//60):02d}m"
+				tooltip_info.append(f"Work: {work_duration_str}")
 		
 		if status == "On Leave" and leave_details_map:
 			lt = leave_details_map.get((employee, db_date_str))
@@ -600,6 +612,12 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 
 		if tooltip_info:
 			row["_details"][date_str] = "\n".join(tooltip_info)
+
+		# Set the cell value
+		if duration_view and status in ["Present", "Work From Home", "Half Day/Other Half Present", "Half Day/Other Half Absent", "Half Day"]:
+			row[date_str] = work_duration_str if work_duration_str != "0h 00m" else abbr
+		else:
+			row[date_str] = abbr
 
 	return row
 
