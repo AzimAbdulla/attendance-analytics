@@ -225,6 +225,23 @@ def get_message() -> str:
 			</span>
 		"""
 		count += 1
+		
+	message += "<br><br>"
+	
+	leave_legend = {
+		"Privilege Leave": ("L(PL)", "#1976d2"),
+		"Sick Leave": ("L(SL)", "#f4511e"),
+		"Casual Leave": ("L(CL)", "#00acc1"),
+		"Compensatory Off": ("L(CO)", "#8e24aa"),
+		"Leave Without Pay": ("L(LWP)", "#8d6e63")
+	}
+	
+	for leave_type, (abbr, color) in leave_legend.items():
+		message += f"""
+			<span style='border-left: 2px solid {color}; padding-right: 12px; padding-left: 5px; margin-right: 3px;'>
+				{_(leave_type)} - {abbr}
+			</span>
+		"""
 
 	return message
 
