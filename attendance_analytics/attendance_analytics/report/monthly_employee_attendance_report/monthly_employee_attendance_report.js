@@ -204,27 +204,49 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 
 				let style = "";
 				const status = data._status_map ? data._status_map[column.fieldname] : "";
+				const is_audit = ["Present (Unmarked)", "Present (Requested)", "WFH (Requested)", "Leave (Requested)"].includes(status);
 				
 				if (raw_value == "HD/P") style = "color:#914EE3";
-				else if (raw_value == "HD/A" || raw_value == "HD") style = "color:#f1c40f"; // Yellow
+				else if (raw_value == "HD/A" || raw_value == "HD") style = "color:#f1c40f";
 				else if (raw_value == "P" || raw_value == "WFH") style = "color:green";
+				else if (raw_value == "P(U)") style = "color:#27ae60; font-style: italic;";
+				else if (raw_value == "P(RQ)") style = "color:#27ae60; font-style: italic;";
+				else if (raw_value == "WFH(RQ)") style = "color:#3187D8; font-style: italic;";
+				else if (raw_value == "L(RQ)") style = "color:#318AD8; font-style: italic;";
 				else if (raw_value == "A") style = "color:red";
 				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) style = "color:#318AD8";
 				else if (duration_view && raw_value && raw_value.includes("h ")) {
 					if (status && status.includes("Half Day")) {
-						style = "color:#f1c40f; font-weight:bold;"; // HD Duration -> Yellow
+						style = "color:#f1c40f; font-weight:bold;";
+					} else if (is_audit) {
+						style = "color:#27ae60; font-weight:bold; font-style: italic;";
 					} else {
-						style = "color:#43a047; font-weight:bold;"; // Regular Duration -> Lighter Green
+						style = "color:#43a047; font-weight:bold;";
 					}
 				}
 				else style = "color:#878787";
 
-				// Show tooltips for "P" or any duration value
+				// Logic for tooltips and cell wrapping
 				const is_duration = duration_view && raw_value && raw_value.includes("h ");
-				if (tooltip && (raw_value === "P" || is_duration)) {
-					value = `<span title="${tooltip}" style="${style}; cursor:help; display:inline-block; width:100%; text-align:center;">${raw_value}</span>`;
-				} else if (style) {
-					value = `<span style="${style}; display:inline-block; width:100%; text-align:center;">${raw_value || ""}</span>`;
+				const is_present = ["P", "P(U)", "P(RQ)", "WFH(RQ)", "L(RQ)"].includes(raw_value);
+
+				if (is_audit) {
+					// Absolute positioning for a perfect edge-to-edge fill inside the datatable cell
+					const audit_bg = "#fff176"; 
+					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${audit_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
+					
+					if (tooltip && (is_present || is_duration)) {
+						value = `<div style="${wrapper_style}"><span title="${tooltip}" style="${style}; cursor:help; font-weight:bold; display:inline-block; position:relative; z-index:2;">${raw_value}</span></div>`;
+					} else {
+						value = `<div style="${wrapper_style}"><span style="${style}; font-weight:bold; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span></div>`;
+					}
+				} else {
+					// Standard layout for normal items
+					if (tooltip && (is_present || is_duration)) {
+						value = `<div style="text-align:center; width:100%;"><span title="${tooltip}" style="${style}; cursor:help; display:inline-block;">${raw_value}</span></div>`;
+					} else if (style) {
+						value = `<div style="text-align:center; width:100%;"><span style="${style}; display:inline-block;">${raw_value || ""}</span></div>`;
+					}
 				}
 			}
 		}
