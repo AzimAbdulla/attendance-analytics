@@ -165,7 +165,12 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 		const summarized_view = frappe.query_report.get_filter_value("summarized_view");
 		const group_by = frappe.query_report.get_filter_value("group_by");
 
-		if (group_by && column.colIndex === 1) {
+		// Column Index Adjustment:
+		// If Group By is active, Employee Name is at index 1.
+		// If NO Group By is active, Employee Name is at index 0.
+		const is_date_column_start = group_by ? 2 : 1;
+
+		if (group_by && column.colIndex === 0) {
 			value = "<strong>" + value + "</strong>";
 		}
 

@@ -233,8 +233,7 @@ def get_columns(filters: Filters) -> list[dict]:
 		columns.append({"label": _(filters.group_by), "fieldname": frappe.scrub(filters.group_by), "fieldtype": "Link", "options": options_mapping.get(filters.group_by), "width": 120})
 
 	columns.extend([
-		{"label": _("Employee"), "fieldname": "employee", "fieldtype": "Link", "options": "Employee", "width": 135},
-		{"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 120},
+		{"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 140},
 	])
 
 	if filters.summarized_view:
