@@ -211,6 +211,10 @@ def get_message() -> str:
 
 	count = 0
 	for status, abbr in status_map.items():
+		if abbr == "P(RQ)":
+			count += 1
+			continue
+			
 		style = f"border-left: 2px solid {colors[count]};"
 		if "(RQ)" in abbr or "(U)" in abbr:
 			style += " font-style: italic;"
@@ -425,6 +429,24 @@ def get_attendance_summary_and_days(employee, filters):
 	return summary[0], days
 
 
+def get_leave_abbr(leave_type: str) -> str:
+	if not leave_type: return ""
+	mapping = {
+		"Privilege Leave": "PL",
+		"Sick Leave": "SL",
+		"Casual Leave": "CL",
+		"Compensatory Off": "CO",
+		"Compensatory Leave": "CO",
+		"Leave Without Pay": "LWP",
+		"Maternity Leave": "ML",
+		"Paternity Leave": "PTL"
+	}
+	if leave_type in mapping:
+		return mapping[leave_type]
+	
+	# Fallback: First letter of each word
+	return "".join([word[0].upper() for word in str(leave_type).split() if word])
+
 def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps) -> dict:
 	total_days = get_dates_in_period(filters)
 	row = {"_details": {}, "_status_map": {}}
@@ -448,7 +470,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 		abbr = status_map.get(status, "")
 		if status == "On Leave" and leave_details_map:
 			lt = leave_details_map.get((employee, db_date_str))
-			if lt: abbr = f"{abbr}({lt})"
+			if lt: abbr = f"L({get_leave_abbr(lt)})"
 		
 		tooltip_info = []
 		work_duration_str = "0h 00m"
@@ -472,7 +494,9 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 			if lt: tooltip_info.insert(0, f"Leave: {lt}")
 		elif status == "Leave (Requested)":
 			pending_lt = emp_leave_apps.get(db_date_str)
-			tooltip_info.insert(0, f"Status: Leave (Requested)\nLeave Type: {pending_lt}")
+			if pending_lt:
+				abbr = f"L(RQ-{get_leave_abbr(pending_lt)})"
+				tooltip_info.insert(0, f"Status: Leave (Requested)\nLeave Type: {pending_lt}")
 
 		if status and "Requested" in str(status) and status != "Leave (Requested)": 
 			tooltip_info.insert(0, _("Status: Attendance Request Pending"))

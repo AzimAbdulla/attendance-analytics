@@ -217,9 +217,16 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				else if (raw_value == "P(U)") style = "color:#27ae60; font-style: italic;";
 				else if (raw_value == "P(RQ)") style = "color:#27ae60; font-style: italic;";
 				else if (raw_value == "WFH(RQ)") style = "color:#3187D8; font-style: italic;";
-				else if (raw_value == "L(RQ)") style = "color:#318AD8; font-style: italic;";
+				else if (raw_value && raw_value.startsWith("L(RQ")) style = "color:#318AD8; font-style: italic;";
 				else if (raw_value == "A") style = "color:red";
-				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) style = "color:#318AD8";
+				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) {
+					if (raw_value.includes("PL")) style = "color:#1976d2; font-weight:bold;"; // Deep Blue
+					else if (raw_value.includes("SL")) style = "color:#f4511e; font-weight:bold;"; // Orange
+					else if (raw_value.includes("CL")) style = "color:#00acc1; font-weight:bold;"; // Teal
+					else if (raw_value.includes("CO")) style = "color:#8e24aa; font-weight:bold;"; // Purple
+					else if (raw_value.includes("LWP")) style = "color:#8d6e63; font-weight:bold;"; // Grey/Brown
+					else style = "color:#318AD8; font-weight:bold;"; // Default Blue
+				}
 				else if (duration_view && raw_value && raw_value.includes("h ")) {
 					if (status && status.includes("Half Day")) {
 						style = "color:#f1c40f; font-weight:bold;";
