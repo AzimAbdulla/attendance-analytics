@@ -432,7 +432,7 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 		elif emp_checkins.get(date_str): unmarked_with_logs += 1
 		else: total_unmarked_days += 1
 	if not any(summary.values()) and not (total_holidays or total_unmarked_days or unmarked_with_logs or pending_requests): return {}
-	return {"total_present": summary.total_present + summary.total_half_days, "total_leaves": summary.total_leaves + summary.total_half_days, "total_absent": summary.total_absent, "total_holidays": total_holidays, "pending_requests": pending_requests, "unmarked_with_logs": unmarked_with_logs, "unmarked_days": total_unmarked_days}
+	return {"total_present": (summary.total_present or 0) + (summary.total_half_days or 0), "total_leaves": (summary.total_leaves or 0) + (summary.total_half_days or 0), "total_absent": (summary.total_absent or 0), "total_holidays": total_holidays, "pending_requests": pending_requests, "unmarked_with_logs": unmarked_with_logs, "unmarked_days": total_unmarked_days}
 
 
 def get_attendance_summary_and_days(employee, filters):
@@ -512,7 +512,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 		elif status == "Leave (Requested)":
 			pending_lt = emp_leave_apps.get(db_date_str)
 			if pending_lt:
-				abbr = f"L(RQ-{get_leave_abbr(pending_lt)})"
+				abbr = "L(RQ)"
 				tooltip_info.insert(0, f"Status: Leave (Requested)\nLeave Type: {pending_lt}")
 
 		if status and "Requested" in str(status) and status != "Leave (Requested)": 
