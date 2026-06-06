@@ -244,7 +244,7 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 
 				if (is_audit) {
 					// Absolute positioning for a perfect edge-to-edge fill inside the datatable cell
-					const audit_bg = "#fff9c4"; // Softer, less saturated pastel yellow
+					const audit_bg = "#e3f2fd"; // Soft, light blue
 					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${audit_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
 					
 					if (tooltip && (is_present || is_duration)) {
