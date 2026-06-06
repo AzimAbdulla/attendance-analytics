@@ -252,6 +252,17 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 					} else {
 						value = `<div style="${wrapper_style}"><span style="${style}; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span></div>`;
 					}
+				} else if (is_duration && (status === "Present" || status === "Work From Home")) {
+					// Dynamic highlight for Present duration (exclude HD and Audits)
+					let dur_bg = "";
+					const hours = parseInt(raw_value.split("h")[0]) || 0;
+					
+					if (hours >= 7) dur_bg = "#e8f5e9"; // Light Green
+					else if (hours >= 6) dur_bg = "#fff9c4"; // Light Yellow
+					else dur_bg = "#ffebee"; // Light Red
+
+					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${dur_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
+					value = `<div style="${wrapper_style}"><span title="${tooltip || ''}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${raw_value}</span></div>`;
 				} else {
 					// Standard layout for normal items
 					if (tooltip && (is_present || is_duration)) {
