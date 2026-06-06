@@ -265,8 +265,6 @@ def get_columns(filters: Filters) -> list[dict]:
 			{"label": _("Total Leaves"), "fieldname": "total_leaves", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Absent"), "fieldname": "total_absent", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Holidays"), "fieldname": "total_holidays", "fieldtype": "Float", "width": 110},
-			{"label": _("Pending Req."), "fieldname": "pending_requests", "fieldtype": "Float", "width": 120},
-			{"label": _("Unmarked (Logs)"), "fieldname": "unmarked_with_logs", "fieldtype": "Float", "width": 130},
 			{"label": _("Unmarked Days"), "fieldname": "unmarked_days", "fieldtype": "Float", "width": 110},
 		])
 
@@ -444,8 +442,6 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 		"total_leaves": (summary.total_leaves or 0), 
 		"total_absent": (summary.total_absent or 0), 
 		"total_holidays": total_holidays, 
-		"pending_requests": pending_requests, 
-		"unmarked_with_logs": unmarked_with_logs, 
 		"unmarked_days": total_unmarked_days
 	}
 
