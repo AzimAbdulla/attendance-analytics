@@ -259,6 +259,7 @@ def get_columns(filters: Filters) -> list[dict]:
 
 	if filters.summarized_view:
 		columns.extend([
+			{"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Float", "width": 130},
 			{"label": _("Total Present"), "fieldname": "total_present", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Half Days"), "fieldname": "total_half_days", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Leaves"), "fieldname": "total_leaves", "fieldtype": "Float", "width": 110},
@@ -433,7 +434,20 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 		elif emp_checkins.get(date_str): unmarked_with_logs += 1
 		else: total_unmarked_days += 1
 	if not any(summary.values()) and not (total_holidays or total_unmarked_days or unmarked_with_logs or pending_requests): return {}
-	return {"total_present": (summary.total_present or 0), "total_half_days": (summary.total_half_days or 0) * 2, "total_leaves": (summary.total_leaves or 0), "total_absent": (summary.total_absent or 0), "total_holidays": total_holidays, "pending_requests": pending_requests, "unmarked_with_logs": unmarked_with_logs, "unmarked_days": total_unmarked_days}
+	
+	total_working_days = len(total_days) - total_holidays
+
+	return {
+		"total_working_days": total_working_days,
+		"total_present": (summary.total_present or 0), 
+		"total_half_days": (summary.total_half_days or 0) * 2, 
+		"total_leaves": (summary.total_leaves or 0), 
+		"total_absent": (summary.total_absent or 0), 
+		"total_holidays": total_holidays, 
+		"pending_requests": pending_requests, 
+		"unmarked_with_logs": unmarked_with_logs, 
+		"unmarked_days": total_unmarked_days
+	}
 
 
 def get_attendance_summary_and_days(employee, filters):
