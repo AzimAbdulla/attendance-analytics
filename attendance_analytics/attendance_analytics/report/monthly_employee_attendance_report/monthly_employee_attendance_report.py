@@ -265,7 +265,6 @@ def get_columns(filters: Filters) -> list[dict]:
 			{"label": _("Total Leaves"), "fieldname": "total_leaves", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Absent"), "fieldname": "total_absent", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Holidays"), "fieldname": "total_holidays", "fieldtype": "Float", "width": 110},
-			{"label": _("Unmarked Days"), "fieldname": "unmarked_days", "fieldtype": "Float", "width": 110},
 		])
 
 		leave_types = frappe.get_all("Leave Type", pluck="name")
@@ -441,8 +440,7 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 		"total_half_days": (summary.total_half_days or 0) * 2, 
 		"total_leaves": (summary.total_leaves or 0), 
 		"total_absent": (summary.total_absent or 0), 
-		"total_holidays": total_holidays, 
-		"unmarked_days": total_unmarked_days
+		"total_holidays": total_holidays
 	}
 
 
