@@ -621,7 +621,7 @@
     "icon": null,
     "is_query_report": 0,
     "label": "Attendance",
-    "link_count": 5,
+    "link_count": 4,
     "link_to": null,
     "link_type": null,
     "onboard": 0,
@@ -631,24 +631,6 @@
     "parenttype": "Workspace",
     "report_ref_doctype": null,
     "type": "Card Break"
-   },
-   {
-    "dependencies": null,
-    "description": null,
-    "hidden": 0,
-    "icon": null,
-    "is_query_report": 0,
-    "label": "Attendance Calendar",
-    "link_count": 0,
-    "link_to": "attendance_calendar",
-    "link_type": "Page",
-    "onboard": 0,
-    "only_for": null,
-    "parent": "HR",
-    "parentfield": "links",
-    "parenttype": "Workspace",
-    "report_ref_doctype": null,
-    "type": "Link"
    },
    {
     "dependencies": null,
