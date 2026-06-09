@@ -242,16 +242,26 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				const is_duration = duration_view && raw_value && raw_value.includes("h ");
 				const is_present = ["P", "P(U)", "P(RQ)", "WFH(RQ)", "L(RQ)"].includes(raw_value);
 
+				let inner_html = "";
+				if (is_duration) {
+					// Convert DD-MM-YYYY to YYYY-MM-DD
+					const date_parts = column.fieldname.split("-");
+					const formatted_date = `${date_parts[2]}-${date_parts[1]}-${date_parts[0]}`;
+					const emp = (data.employee || "").replace(/'/g, "\\'");
+					const onclick_action = `frappe.route_options={'employee':'${emp}','time':['between',['${formatted_date} 00:00:00','${formatted_date} 23:59:59']]};frappe.set_route('List','Employee Checkin');`.replace(/\n/g, ' ');
+					
+					inner_html = `<a href="javascript:void(0)" onclick="${onclick_action}" title="${tooltip || ''}" style="${style}; cursor:pointer; text-decoration:none; display:inline-block; position:relative; z-index:2;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${raw_value}</a>`;
+				} else if (tooltip && is_present) {
+					inner_html = `<span title="${tooltip}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${raw_value}</span>`;
+				} else {
+					inner_html = `<span style="${style}; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span>`;
+				}
+
 				if (is_audit) {
 					// Absolute positioning for a perfect edge-to-edge fill inside the datatable cell
 					const audit_bg = "#e3f2fd"; // Soft, light blue
 					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${audit_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
-					
-					if (tooltip && (is_present || is_duration)) {
-						value = `<div style="${wrapper_style}"><span title="${tooltip}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${raw_value}</span></div>`;
-					} else {
-						value = `<div style="${wrapper_style}"><span style="${style}; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span></div>`;
-					}
+					value = `<div style="${wrapper_style}">${inner_html}</div>`;
 				} else if (is_duration && (status === "Present" || status === "Work From Home")) {
 					// Dynamic highlight for Present duration (exclude HD and Audits)
 					let dur_bg = "";
@@ -262,14 +272,10 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 					else dur_bg = "#ffebee"; // Light Red
 
 					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${dur_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
-					value = `<div style="${wrapper_style}"><span title="${tooltip || ''}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${raw_value}</span></div>`;
+					value = `<div style="${wrapper_style}">${inner_html}</div>`;
 				} else {
 					// Standard layout for normal items
-					if (tooltip && (is_present || is_duration)) {
-						value = `<div style="text-align:center; width:100%;"><span title="${tooltip}" style="${style}; cursor:help; display:inline-block;">${raw_value}</span></div>`;
-					} else if (style) {
-						value = `<div style="text-align:center; width:100%;"><span style="${style}; display:inline-block;">${raw_value || ""}</span></div>`;
-					}
+					value = `<div style="text-align:center; width:100%;">${inner_html}</div>`;
 				}
 			}
 		}
