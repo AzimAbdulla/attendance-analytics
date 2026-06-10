@@ -19,6 +19,16 @@ app_description = "Attendance trend analytics and reporting"
 app_email = "team@example.com"
 app_license = "mit"
 
+# Scheduled Tasks
+# ---------------
+scheduler_events = {
+	"cron": {
+		"*/1 * * * *": [
+			"attendance_analytics.tasks.check_missed_heartbeats"
+		]
+	}
+}
+
 # ==============================================================================
 # WARNINGS & CRITICAL DEPENDENCIES
 # ==============================================================================
