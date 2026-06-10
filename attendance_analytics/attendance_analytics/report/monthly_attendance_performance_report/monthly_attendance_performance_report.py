@@ -1,3 +1,13 @@
+"""
+MONTHLY ATTENDANCE PERFORMANCE REPORT
+-------------------------------------
+This report is the high-level 'Executive Scorecard'. It evaluates employee behavior
+over a month and assigns a numeric score based on presence, punctuality, and work hours.
+
+It uses a deductive model: employees start with a base score, and points are 
+removed for absences, late arrivals, or short work hours.
+"""
+
 import frappe
 from frappe import _
 from frappe.utils import getdate, add_days, get_datetime, now_datetime, add_months
@@ -5,6 +15,12 @@ import datetime
 from itertools import groupby
 
 def execute(filters=None):
+    """
+    Main entry point.
+    - Loads dynamic scoring rules from the Settings document.
+    - Calculates scores for Current and Previous months to show trends.
+    - Returns data rows and the Top 10 performance bar chart.
+    """
     if not filters:
         filters = {}
 
@@ -16,14 +32,19 @@ def execute(filters=None):
     return columns, data, None, chart
 
 def get_settings():
+    """
+    Retrieves the global configuration from 'Attendance Performance Settings'.
+    Ensures penalties and office timings are dynamic and not hardcoded in Python.
+    """
     settings = frappe.get_doc("Attendance Performance Settings")
     
-    # Convert time strings to objects
+    # office_start_time (time): Standard shift start time (e.g., 09:00:00).
     if isinstance(settings.office_start_time, str):
         settings.office_start_time = datetime.datetime.strptime(settings.office_start_time, "%H:%M:%S").time()
     elif isinstance(settings.office_start_time, datetime.timedelta):
         settings.office_start_time = (datetime.datetime.min + settings.office_start_time).time()
 
+    # severe_late_threshold (time): Punctuality cutoff for major point deductions.
     if isinstance(settings.severe_late_threshold, str):
         settings.severe_late_threshold = datetime.datetime.strptime(settings.severe_late_threshold, "%H:%M:%S").time()
     elif isinstance(settings.severe_late_threshold, datetime.timedelta):
@@ -32,9 +53,11 @@ def get_settings():
     return settings
 
 def get_chart(data):
+    """Generates the 'Top 10 Employees' bar chart displayed at the top of the report."""
     if not data:
         return None
 
+    # top_10 (list): Sliced from the final sorted data list.
     top_10 = data[:10]
     
     chart = {
@@ -57,6 +80,7 @@ def get_chart(data):
     return chart
 
 def get_columns():
+    """Defines the 20 columns for the employee performance ranking table."""
     return [
         {"label": _("Rank"), "fieldname": "rank", "fieldtype": "Int", "width": 60},
         {"label": _("Employee Name"), "fieldname": "employee_name", "fieldtype": "Data", "width": 160},
@@ -81,20 +105,23 @@ def get_columns():
     ]
 
 def get_data(filters, settings):
+    """Orchestrates data fetching and resolving rankings and trends."""
     month = filters.get("month")
     year = filters.get("year")
     if not month or not year: return []
 
-    # Current Period
+    # --- Setup Evaluation Periods ---
     curr_start = getdate(f"{year}-{month}-01")
     curr_end = add_days(add_months(curr_start, 1), -1)
+    
+    # Prorate end date to today if evaluating the current ongoing month.
     today = getdate(now_datetime())
     if curr_end > today: curr_end = today
 
-    # Standard Working Days for the month (based on Holiday List '2026' and Sundays)
+    # standard_working_days (int): Contractual days expected minus company holidays.
     standard_working_days = get_standard_working_days(curr_start, curr_end)
 
-    # Previous Period
+    # Setup dates for historical month to enable Green/Red trend arrows.
     prev_start = add_months(curr_start, -1)
     prev_end = add_days(curr_start, -1)
     prev_standard_working_days = get_standard_working_days(prev_start, prev_end)
@@ -103,17 +130,15 @@ def get_data(filters, settings):
     employee_list = [e.name for e in employees]
     if not employee_list: return []
 
-    # Calculate Current Scores and Ranks
+    # calculate result dictionaries for current and previous periods.
     curr_results = calculate_scores_and_ranks(employee_list, curr_start, curr_end, settings, employees, standard_working_days)
-    
-    # Calculate Previous Scores and Ranks
     prev_results = calculate_scores_and_ranks(employee_list, prev_start, prev_end, settings, employees, prev_standard_working_days)
 
     report_data = []
     for emp_id in curr_results:
         data = curr_results[emp_id]
         
-        # 1. Score Trend
+        # --- SCORE TREND ---
         trend = '<span style="color:grey">—</span>'
         if emp_id in prev_results:
             diff = data["final_score"] - prev_results[emp_id]["final_score"]
@@ -121,63 +146,55 @@ def get_data(filters, settings):
                 trend = f'<span style="color:green">↑ +{round(diff, 1)}</span>'
             elif diff < -0.1:
                 trend = f'<span style="color:red">↓ {round(diff, 1)}</span>'
-
         data["trend"] = trend
 
-        # 2. Rank Trend (Climbed/Fallen number)
+        # --- RANK TREND ---
         rank_trend = '<span style="color:grey">—</span>'
         if emp_id in prev_results:
             curr_rank = data["rank"]
             prev_rank = prev_results[emp_id]["rank"]
             
-            if curr_rank < prev_rank: # Improved rank
+            if curr_rank < prev_rank: # Rank improved (e.g. from 5th to 2nd)
                 rank_trend = f'<span style="color:green">↑ {prev_rank - curr_rank}</span>'
-            elif curr_rank > prev_rank: # Dropped rank
+            elif curr_rank > prev_rank: # Rank dropped
                 rank_trend = f'<span style="color:red">↓ {curr_rank - prev_rank}</span>'
         
         data["rank_trend"] = rank_trend
         report_data.append(data)
 
-    # Sort final report by Rank
+    # Sort final output strictly by numeric rank.
     report_data.sort(key=lambda x: x["rank"])
-
     return report_data
 
 def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, employees_meta, standard_working_days):
+    """
+    Main mathematical logic for performance scoring.
+    Iterates through each employee, calculates work hours via Greedy logic, 
+    and applies all penalty modifiers.
+    """
+    # Bulk fetch attendance documents
     attendance_records = frappe.get_all(
         "Attendance",
-        filters={
-            "employee": ["in", employee_list],
-            "attendance_date": ["between", [start_date, end_date]],
-            "docstatus": 1
-        },
+        filters={"employee": ["in", employee_list], "attendance_date": ["between", [start_date, end_date]], "docstatus": 1},
         fields=["employee", "attendance_date", "status", "leave_type"]
     )
-    
     att_map = {}
     for att in attendance_records:
-        if att.employee not in att_map: att_map[att.employee] = []
-        att_map[att.employee].append(att)
+        att_map.setdefault(att.employee, []).append(att)
 
+    # Bulk fetch raw biometric punches
     checkin_records = frappe.get_all(
         "Employee Checkin",
-        filters={
-            "employee": ["in", employee_list],
-            "time": ["between", [get_datetime(f"{start_date} 00:00:00"), get_datetime(f"{end_date} 23:59:59")]],
-            "skip_auto_attendance": 0
-        },
+        filters={"employee": ["in", employee_list], "time": ["between", [get_datetime(f"{start_date} 00:00:00"), get_datetime(f"{end_date} 23:59:59")]], "skip_auto_attendance": 0},
         fields=["employee", "time", "log_type"],
         order_by="time asc"
     )
-    
     checkin_map = {}
     for checkin in checkin_records:
         date_str = str(checkin.time.date())
-        emp = checkin.employee
-        if emp not in checkin_map: checkin_map[emp] = {}
-        if date_str not in checkin_map[emp]: checkin_map[emp][date_str] = []
-        checkin_map[emp][date_str].append(checkin)
+        checkin_map.setdefault(checkin.employee, {}).setdefault(date_str, []).append(checkin)
 
+    # leave_penalties (dict): Pre-mapped deductions for specific leave types from settings.
     leave_penalties = {
         "Privilege Leave": settings.privilege_leave_penalty,
         "Sick Leave": settings.sick_leave_penalty,
@@ -195,30 +212,33 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
     scores_list = []
 
     for emp in employees_meta:
-        # WFH Exclusion
+        # EXCLUSION LOGIC: Skip employees matching exclusion rules (e.g. Interns or remote branches).
         if settings.enable_wfh_exclusion:
-            is_wfh_only = False
-            if id_pattern and id_pattern in str(emp.employee_number or "").upper(): is_wfh_only = True
-            if not is_wfh_only and emp.branch in excluded_branches: is_wfh_only = True
-            if not is_wfh_only and emp.employment_type in excluded_employment_types: is_wfh_only = True
-            if is_wfh_only: continue
+            is_excluded = False
+            if id_pattern and id_pattern in str(emp.employee_number or "").upper(): is_excluded = True
+            if not is_excluded and emp.branch in excluded_branches: is_excluded = True
+            if not is_excluded and emp.employment_type in excluded_employment_types: is_excluded = True
+            if is_excluded: continue
 
         emp_att = att_map.get(emp.name, [])
         emp_checkins = checkin_map.get(emp.name, {})
 
+        # stats (dict): Local month accumulator for counts and physical work time.
         stats = {
             "present_days": 0, "half_days": 0, "leave_days": 0, "wfh_days": 0,
             "absent_days": 0, "lwp_days": 0, "total_working_days": len(emp_att),
             "late_arrival_count": 0, "severe_late_count": 0,
-            "actual_work_seconds": 0
+            "actual_work_seconds": 0 # Sum of physical presence accumulated via Greedy logic.
         }
         
+        # Initial grade starts at Base Score. Modifiers are added/subtracted.
         score = settings.base_score
         
         for att in emp_att:
             status = att.status
             date_str = str(att.attendance_date)
             
+            # --- STATUS-BASED POINT DEDUCTIONS ---
             if status == "Present": stats["present_days"] += 1
             elif status == "Half Day":
                 stats["half_days"] += 1
@@ -234,11 +254,12 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
                 stats["absent_days"] += 1
                 score -= settings.absent_penalty
                 
+            # --- PUNCTUALITY & WORK HOUR AUDIT ---
             if date_str in emp_checkins:
                 day_logs = emp_checkins[date_str]
                 checkin_time = day_logs[0].time.time()
                 
-                # 1. Punctuality
+                # 1. First-In Log Punctuality Check
                 if checkin_time >= settings.office_start_time:
                     diff = datetime.datetime.combine(datetime.date.min, checkin_time) - \
                            datetime.datetime.combine(datetime.date.min, settings.office_start_time)
@@ -249,7 +270,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
                             score -= settings.severe_late_penalty
                             stats["severe_late_count"] += 1
 
-                # 2. Duration Logic (Always calculated to accumulate Actual Hours)
+                # 2. Clustered Greedy Work-Hour Accumulation
                 day_work_seconds = 0
                 day_clusters = []
                 for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
@@ -260,7 +281,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
 
                 stats["actual_work_seconds"] += day_work_seconds
 
-                # Apply scoring only if enabled
+                # Apply scoring mods for exceeding shift targets or excessive breaks
                 if settings.enable_duration_scoring:
                     if day_work_seconds >= (settings.work_target_hours * 3600): score += settings.work_bonus
                     if len(day_logs) >= 2:
@@ -268,32 +289,35 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
                         if (max(span - day_work_seconds, 0)) > (settings.break_threshold_hours * 3600):
                             score -= settings.break_penalty
 
+        # --- HABITUAL PUNCTUALITY PENALTY ---
         if settings.enable_habitual_penalties:
             if stats["severe_late_count"] > settings.habitual_threshold_2: score -= settings.habitual_penalty_2
             elif stats["severe_late_count"] > settings.habitual_threshold_1: score -= settings.habitual_penalty_1
 
+        # --- REWARDS FOR PERFECT LOGS ---
         if settings.enable_rewards and stats["total_working_days"] > 0:
             if stats["late_arrival_count"] == 0: score += settings.punctuality_bonus
             if stats["absent_days"] == 0 and stats["half_days"] == 0 and stats["lwp_days"] == 0: score += settings.consistency_bonus
 
-        # Standard Attendance % calculation
+        # --- KPI RESOLUTION ---
+        # attendance_percentage (float): Presence rate compared to total working days.
         attendance_percentage = 0
         if standard_working_days > 0:
             attendance_percentage = (stats["present_days"] + stats["wfh_days"] + (stats["half_days"] * 0.5)) / standard_working_days * 100
 
-        # Hour-based metrics
-        expected_work_seconds = standard_working_days * 8 * 3600
+        # Hours Compliance: Actual worked seconds / Expected 8h per present day.
         expected_present_seconds = stats["present_days"] * 8 * 3600
-        
         compliance_percentage = 0
         if expected_present_seconds > 0:
             compliance_percentage = (stats["actual_work_seconds"] / expected_present_seconds) * 100
 
+        # Overall Compliance: Actual worked seconds / Total contractual month target.
+        expected_work_seconds = standard_working_days * 8 * 3600
         overall_compliance_percentage = 0
         if expected_work_seconds > 0:
             overall_compliance_percentage = (stats["actual_work_seconds"] / expected_work_seconds) * 100
 
-        # Work Hour Compliance Scoring
+        # --- DYNAMIC COMPLIANCE SCORING MODIFIERS ---
         if getattr(settings, "enable_compliance_scoring", 0) and stats["present_days"] > 0:
             if compliance_percentage >= getattr(settings, "compliance_threshold_1", 90.0):
                 score += getattr(settings, "compliance_modifier_1", 2.0)
@@ -306,6 +330,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             else:
                 score += getattr(settings, "compliance_modifier_5", -3.0)
 
+        # Floor score at 0.0
         score = max(score, 0)
 
         scores_list.append({
@@ -330,7 +355,7 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
             "final_score": score,
         })
 
-    # Rank the list
+    # Sort final list by score (Descending) to assign ranks.
     scores_list.sort(key=lambda x: x["final_score"], reverse=True)
     
     results_map = {}
@@ -341,30 +366,33 @@ def calculate_scores_and_ranks(employee_list, start_date, end_date, settings, em
     return results_map
 
 def format_duration_short(seconds):
-    if seconds <= 0:
-        return "0h 00m"
+    """Formats raw time seconds into the standard 'Xh YYm' display string."""
+    if seconds <= 0: return "0h 00m"
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     return f"{h}h {m:02d}m"
 
 def get_standard_working_days(start_date, end_date):
+    """
+    Calculates expected work days based on the '2026' Holiday List.
+    Accounts for Sundays as Weekly Offs.
+    """
     holidays = frappe.get_all('Holiday', 
-        filters={
-            'parent': '2026', 
-            'holiday_date': ['between', [start_date, end_date]]
-        }, 
+        filters={'parent': '2026', 'holiday_date': ['between', [start_date, end_date]]}, 
         fields=['holiday_date', 'weekly_off']
     )
     holiday_dates = {h.holiday_date for h in holidays}
     working_days = 0
     curr_date = getdate(start_date)
     while curr_date <= getdate(end_date):
+        # Skip Sunday (weekday 6) or specific Holiday.
         if curr_date not in holiday_dates and curr_date.weekday() != 6:
             working_days += 1
         curr_date = add_days(curr_date, 1)
     return working_days
 
 def get_employees(filters):
+    """Fetches list of active employees matching company/dept filters."""
     conditions = {"status": "Active"}
     if filters.get("department"): conditions["department"] = filters.get("department")
     if filters.get("branch"): conditions["branch"] = filters.get("branch")
@@ -375,3 +403,17 @@ def get_employees(filters):
         filters=conditions,
         fields=["name", "employee_name", "department", "employee_number", "branch", "employment_type"]
     )
+
+# ==============================================================================
+# WARNINGS & CRITICAL DEPENDENCIES
+# ==============================================================================
+# 1. YEAR HARDCODE: 'get_standard_working_days' uses '2026' as the parent
+#    Holiday List name. Ensure this is updated to '2027' next year.
+#
+# 2. SETTINGS DEPENDENCY: Every scoring modifier depends on the fields in 
+#    the 'Attendance Performance Settings' document. Renaming fields in that
+#    DocType will cause this report to crash.
+#
+# 3. SCORING THRESHOLDS: Modifiers are fetched via 'getattr'. To add levels, 
+#    update both the JSON metadata and the logic block in this file.
+# ==============================================================================

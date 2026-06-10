@@ -1,5 +1,14 @@
-# Copyright (c) 2026, Azim Abdulla and contributors
-# For license information, please see license.txt
+"""
+MONTHLY WORK DURATION REPORT (MWDR)
+----------------------------------
+This report provides a granular 'Time Sheet' for a single employee. 
+It calculates the exact physical presence by processing biometric logs 
+and separating productive work time from break time.
+
+Main Use Case: 
+This report is typically reached by clicking an Employee's name in the 
+'Monthly Employee Attendance Report' (Audit Matrix).
+"""
 
 import frappe
 from frappe import _
@@ -7,6 +16,16 @@ from frappe.utils import getdate, add_days, get_datetime, add_months
 from itertools import groupby
 
 def execute(filters=None):
+    """
+    Main entry point. Validates employee selection and fetches report data.
+    
+    Returns:
+        columns (list): Table headers metadata.
+        data (list): Daily work breakdown rows.
+        message (None): Not used in this report.
+        chart (dict): Line chart config showing work-hour trends.
+        summary (list): Card data for the top of the report.
+    """
     if not filters:
         filters = {}
 
@@ -20,23 +39,28 @@ def execute(filters=None):
     return columns, data, None, chart, summary
 
 def get_chart(data):
+    """
+    Generates a trend line chart of work hours over the month.
+    
+    Arguments:
+        data (list): The list of row dictionaries prepared in get_data.
+    """
     if not data:
         return None
 
-    # Filter out styled HTML and extract just the Day for legibility
+    # labels (list): Stores day numbers (e.g., 01, 02) for the X-axis.
     labels = []
     for d in data:
         date_str = d["date"]
+        # Handle cases where the date is wrapped in HTML for Holiday coloring
         if "<span" in str(date_str):
-            # Extract date from span: <span ...>2026-01-01</span>
             date_str = date_str.split(">")[1].split("<")[0]
         
-        # Use just the day number (YYYY-MM-DD -> DD)
         day_label = date_str.split("-")[-1]
         labels.append(day_label)
 
     def get_hours(duration_str):
-        # Format is "Xh Ym"
+        """Helper to convert 'Xh YYm' strings into float hours for the chart."""
         try:
             parts = duration_str.split(" ")
             h = float(parts[0].replace("h", ""))
@@ -45,6 +69,8 @@ def get_chart(data):
         except:
             return 0
 
+    # values (list): Daily work hour floats for the Y-axis.
+    # Capped at 15.0 to prevent outlier punch errors from breaking chart scale.
     values = [min(get_hours(d["work_duration"]), 15.0) for d in data]
 
     chart = {
@@ -59,21 +85,14 @@ def get_chart(data):
         },
         "type": "line",
         "colors": ["#3498db"],
-        "lineOptions": {
-            "regionFill": 1,
-            "hideDots": 0,
-            "strokeWidth": 3
-        },
-        "axisOptions": {
-            "xIsSeries": 1,
-            "yAxisMode": "tick",
-            "maxValue": 15
-        }
+        "lineOptions": {"regionFill": 1, "hideDots": 0, "strokeWidth": 3},
+        "axisOptions": {"xIsSeries": 1, "yAxisMode": "tick", "maxValue": 15}
     }
 
     return chart
 
 def get_columns():
+    """Defines the 8 columns for the daily breakdown table."""
     return [
         {"label": _("Date"), "fieldname": "date", "fieldtype": "Data", "width": 120},
         {"label": _("Status"), "fieldname": "status", "fieldtype": "Data", "width": 120},
@@ -86,10 +105,15 @@ def get_columns():
     ]
 
 def get_data(filters):
+    """
+    Main processing logic. 
+    Fetches raw logs and applies Clustered Greedy logic for one specific employee.
+    """
     emp_input = filters.get("employee")
     month_name = filters.get("month")
     year = filters.get("year")
 
+    # Resolve numerical month
     month_map = {
         "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
         "July": 7, "August": 8, "September": 9, "October": 10, "November": 11, "December": 12
@@ -99,6 +123,7 @@ def get_data(filters):
     start_date = getdate(f"{year}-{month}-01")
     end_date = add_days(add_months(start_date, 1), -1)
 
+    # Validate employee ID or handle fuzzy name lookup
     employee_id = emp_input
     if emp_input:
         employees = frappe.get_all("Employee", filters={"name": emp_input}, pluck="name")
@@ -110,7 +135,7 @@ def get_data(filters):
         else:
             return [], []
 
-    # Fetch checkins for the selected employee and month
+    # logs (list): All biometric punches for the month.
     logs = frappe.get_all(
         "Employee Checkin",
         filters={
@@ -122,51 +147,31 @@ def get_data(filters):
         order_by="time asc"
     )
 
-    # Fetch holidays
-    holidays = frappe.get_all('Holiday', 
-        filters={
-            'parent': '2026', 
-            'holiday_date': ['between', [start_date, end_date]]
-        }, 
-        fields=['holiday_date']
-    )
+    # holiday_dates (set): Used to identify weekends/holidays for row coloring.
+    holidays = frappe.get_all('Holiday', filters={'parent': '2026', 'holiday_date': ['between', [start_date, end_date]]}, fields=['holiday_date'])
     holiday_dates = {str(h.holiday_date) for h in holidays}
 
-    # Fetch attendance
+    # att_map (dict): Maps date string to official Attendance Doc for status labeling.
     attendance = frappe.get_all("Attendance",
-        filters={
-            "employee": employee_id,
-            "attendance_date": ["between", [start_date, end_date]],
-            "docstatus": 1
-        },
+        filters={"employee": employee_id, "attendance_date": ["between", [start_date, end_date]], "docstatus": 1},
         fields=["attendance_date", "status", "leave_type"]
     )
     att_map = {str(a.attendance_date): a for a in attendance}
 
-    # Group logs by date
+    # daily_logs (dict): Groups raw logs into { "YYYY-MM-DD": [list of logs] }
     daily_logs = {}
     for log in logs:
         date_str = str(log.time.date())
-        if date_str not in daily_logs:
-            daily_logs[date_str] = []
-        daily_logs[date_str].append(log)
+        daily_logs.setdefault(date_str, []).append(log)
 
-    # Fetch all active leave types to pre-initialize summary
     all_leave_types = frappe.get_all("Leave Type", pluck="name")
-
     report_data = []
     
-    # Initialize Summary Counters with all standard categories
-    counts = {
-        "Present": 0,
-        "Absent": 0,
-        "Half Day": 0,
-        "Work From Home": 0,
-        "On Leave": 0
-    }
+    # counts (dict): Aggregator for the summary cards.
+    counts = {"Present": 0, "Absent": 0, "Half Day": 0, "Work From Home": 0, "On Leave": 0}
     leave_type_counts = {lt: 0 for lt in all_leave_types}
 
-    # Iterate through each day of the month in chronological order
+    # Chronological Processing Loop
     curr_date = start_date
     while curr_date <= end_date:
         date_str = str(curr_date)
@@ -176,49 +181,47 @@ def get_data(filters):
         status = att_row.status if att_row else ""
         leave_type = att_row.leave_type if att_row else ""
 
-        # Set Holiday status if no attendance record exists
         if not status and date_str in holiday_dates:
             status = "Holiday"
 
-        # Update Summary Counts
+        # Increment summary counts
         if status:
             if status == "Present": counts["Present"] += 1
             elif status == "Absent": counts["Absent"] += 1
             elif status == "Half Day": counts["Half Day"] += 1
-            elif "Work From Home" in status or "WFH" in status:
-                counts["Work From Home"] += 1
-            
-            # Independent check for Leaves
+            elif "Work From Home" in status or "WFH" in status: counts["Work From Home"] += 1
             if "Leave" in status:
                 counts["On Leave"] += 1
-                if leave_type in leave_type_counts:
-                    leave_type_counts[leave_type] += 1
+                if leave_type in leave_type_counts: leave_type_counts[leave_type] += 1
 
+        # Logic variables for durations
         work_duration = "0h 00m"
         break_duration = "0h 00m"
         span_duration = "0h 00m"
-        first_in = None
-        last_out = None
+        first_in = last_out = None
 
         if day_logs:
             first_in = day_logs[0].time.time()
             last_out = day_logs[-1].time.time()
             work_seconds = 0
             
-            # 1. Group consecutive logs into clusters
+            # --- CLUSTERED GREEDY LOGIC ---
+            # Group consecutive logs (e.g., multiple INs) into sessions
             clusters = []
             for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
                 clusters.append((log_type, list(group)))
 
-            # 2. Calculate Work Duration (Clustered Greedy: IN start to OUT end)
             for i in range(len(clusters) - 1):
+                # Calculate time from first IN of cluster to last OUT of following cluster
                 if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT":
                     work_seconds += (clusters[i+1][1][-1].time - clusters[i][1][0].time).total_seconds()
 
-            # 3. Calculate Total Span and Break Time
+            # --- SPAN & BREAK LOGIC ---
             if len(day_logs) >= 2:
+                # span_seconds (float): Total office presence (Absolute Last - Absolute First)
                 span_seconds = (day_logs[-1].time - day_logs[0].time).total_seconds()
                 span_duration = format_duration_short(span_seconds)
+                # Break = Total Office time - Productive Work time
                 break_seconds = max(span_seconds - work_seconds, 0)
                 break_duration = format_duration_short(break_seconds)
             
@@ -238,10 +241,9 @@ def get_data(filters):
             "work_duration": work_duration,
             "break_duration": break_duration
         })
-
         curr_date = add_days(curr_date, 1)
 
-    # Apply Filters to the table data
+    # Post-Loop Filtering
     status_filter = filters.get("status")
     lt_filter = filters.get("leave_type")
 
@@ -250,35 +252,43 @@ def get_data(filters):
         for row in report_data:
             match = True
             if status_filter:
-                if status_filter == "On Leave":
-                    if "Leave" not in row["status"]: match = False
-                elif status_filter == "Work From Home":
-                    if row["status"] not in ["Work From Home", "WFH"]: match = False
-                elif row["status"] != status_filter:
-                    match = False
-            
-            if match and lt_filter:
-                if row["leave_type"] != lt_filter: match = False
-            
-            if match:
-                filtered_data.append(row)
+                if status_filter == "On Leave" and "Leave" not in row["status"]: match = False
+                elif status_filter == "Work From Home" and row["status"] not in ["Work From Home", "WFH"]: match = False
+                elif status_filter not in ["On Leave", "Work From Home"] and row["status"] != status_filter: match = False
+            if match and lt_filter and row["leave_type"] != lt_filter: match = False
+            if match: filtered_data.append(row)
         report_data = filtered_data
 
-    # Build report summary list
+    # Generate Summary Card List
     summary = []
     summary.append({"label": _("Present"), "value": counts["Present"], "indicator": "green", "datatype": "Int"})
     summary.append({"label": _("Absent"), "value": counts["Absent"], "indicator": "red", "datatype": "Int"})
     summary.append({"label": _("Half Day"), "value": counts["Half Day"], "indicator": "orange", "datatype": "Int"})
     summary.append({"label": _("WFH"), "value": counts["Work From Home"], "indicator": "blue", "datatype": "Int"})
-    
     for lt, count in leave_type_counts.items():
-        summary.append({"label": _(lt), "value": count, "indicator": "grey", "datatype": "Int"})
+        if count > 0: # Only show leave types actually taken
+            summary.append({"label": _(lt), "value": count, "indicator": "grey", "datatype": "Int"})
 
     return report_data, summary
 
 def format_duration_short(seconds):
-    if seconds <= 0:
-        return "0h 00m"
+    """Converts seconds into 'Xh YYm' format for report consistency."""
+    if seconds <= 0: return "0h 00m"
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     return f"{h}h {m:02d}m"
+
+
+# ==============================================================================
+# WARNINGS & CRITICAL DEPENDENCIES
+# ==============================================================================
+# 1. DRILL-DOWN: The 'employee' filter is pre-filled when routing from the 
+#    Audit Matrix. Changing the filter name will break that integration.
+#
+# 2. YEAR HARDCODE: The 'Holiday' parent is hardcoded to '2026'. Ensure this 
+#    is updated annually for accurate holiday identification.
+#
+# 3. UI COLORING: The Green color for durations is applied in the .js file 
+#    based on the 'work_duration' fieldname. If you rename it in Python, 
+#    you must update the JS formatter.
+# ==============================================================================
