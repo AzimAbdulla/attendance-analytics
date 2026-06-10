@@ -119,6 +119,5 @@ Integrate your custom Desktop Agent using these secure endpoints:
 - **Heatmap Formatting**: The frontend heatmap relies on duration strings being formatted strictly as `Xh YYm`. Do not change the `format_duration` function in Python without a corresponding JS update.
 
 ---
-**License**: MIT  
-**Author**: Contributors  
+
 **Repository**: [attendance-analytics-soxo](https://github.com/AzimAbdulla10/attendance-analytics-soxo.git)
