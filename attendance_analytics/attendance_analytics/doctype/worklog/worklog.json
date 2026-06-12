@@ -27,12 +27,12 @@
    "reqd": 1
   },
   {
-   "default": "Administrator",
    "fieldname": "assignee",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assignee"
+   "label": "Assignee",
+   "options": "Employee"
   },
   {
    "fieldname": "priority",
@@ -56,11 +56,10 @@
   },
   {
    "fieldname": "status",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Status",
-   "options": "\nBacklog\nOpen\nFor Discussion\nDev Progress\nCode Review\nReady\nQA Ready\nQA Pending\nQA Progress\nQA Rejected\nQA Verified\nStaging QA Rejected\nStaging QA Verified\nUAT QA Ready\nUAT QA Pending\nUAT QA Rejected\nUAT QA Verified\nDone"
+   "label": "Status"
   },
   {
    "fieldname": "time_spent",

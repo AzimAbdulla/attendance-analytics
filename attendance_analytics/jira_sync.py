@@ -98,8 +98,33 @@ def sync_daily_worklogs():
                 if "comment" in wl:
                     description = extract_adf_text(wl["comment"]).strip()
                     
-                # Mapping Assignee
+                # --- ROBUST EMPLOYEE MAPPING LOGIC ---
+                jira_account_id = wl.get("author", {}).get("accountId")
                 jira_display_name = wl.get("author", {}).get("displayName", "Unknown")
+                
+                frappe_employee = None
+                
+                # Step 1: Check Mapping Table (100% Bulletproof)
+                if jira_account_id:
+                    mapping = frappe.get_all("Jira Employee Mapping", filters={"jira_account_id": jira_account_id}, pluck="employee", limit=1)
+                    if mapping:
+                        frappe_employee = mapping[0]
+                        
+                # Step 2: Fallback to Fuzzy Name Match (If mapping table isn't filled out yet)
+                if not frappe_employee and jira_display_name != "Unknown":
+                    emp = frappe.get_all("Employee", filters={"employee_name": jira_display_name}, pluck="name", limit=1)
+                    if emp:
+                        frappe_employee = emp[0]
+                        # Optional: Could auto-create mapping here to save HR time
+                        
+                # Step 3: Fallback to global setting
+                if not frappe_employee:
+                    frappe_employee = settings.default_fallback_employee
+                    
+                # Step 4: Abort if mapping completely failed
+                if not frappe_employee:
+                    frappe.log_error(message=f"Could not map Jira user '{jira_display_name}' (ID: {jira_account_id}) to Frappe Employee. Skipping worklog {wl_id}.", title="Jira Sync Warning")
+                    continue
                 
                 # Upsert to Frappe Worklog
                 if frappe.db.exists("Worklog", unique_name):
@@ -107,13 +132,14 @@ def sync_daily_worklogs():
                     doc.time_spent = time_spent_hrs
                     doc.description = description
                     doc.status = status # Update status in case it moved to QA/Done
+                    # Do not overwrite assignee if it was manually corrected by HR later
                     doc.save(ignore_permissions=True)
                 else:
                     doc = frappe.get_doc({
                         "doctype": "Worklog",
                         "name": unique_name, # Overrides autoname to use our safe Jira ID
                         "date": started_date,
-                        "assignee": jira_display_name,
+                        "assignee": frappe_employee,
                         "priority": priority,
                         "task": task_title,
                         "description": description,

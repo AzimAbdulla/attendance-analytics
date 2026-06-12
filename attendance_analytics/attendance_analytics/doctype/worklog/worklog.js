@@ -4,7 +4,13 @@ frappe.ui.form.on("Worklog", {
 		// Auto-fill for new records
 		if (frm.is_new()) {
 			if (!frm.doc.date) frm.set_value("date", frappe.datetime.nowdate());
-			if (!frm.doc.assignee || frm.doc.assignee === "Administrator") frm.set_value("assignee", frappe.session.user_fullname);
+			if (!frm.doc.assignee) {
+				frappe.db.get_value("Employee", {"user_id": frappe.session.user}, "name", (r) => {
+					if (r && r.name) {
+						frm.set_value("assignee", r.name);
+					}
+				});
+			}
 		}
 
 		// Permissions check: Lock fields for standard Employees
