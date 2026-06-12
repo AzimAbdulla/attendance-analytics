@@ -25,6 +25,9 @@ scheduler_events = {
 	"cron": {
 		"*/1 * * * *": [
 			"attendance_analytics.tasks.check_missed_heartbeats"
+		],
+		"0 20 * * *": [
+			"attendance_analytics.jira_sync.sync_daily_worklogs"
 		]
 	}
 }

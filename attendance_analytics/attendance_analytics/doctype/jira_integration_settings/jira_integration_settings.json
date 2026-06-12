@@ -1,0 +1,104 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-06-12 15:12:23.000619",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enable_sync",
+  "cb_1",
+  "last_sync_status",
+  "sb_credentials",
+  "jira_domain",
+  "jira_user_email",
+  "jira_api_token",
+  "sb_mapping",
+  "default_fallback_employee"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enable_sync",
+   "fieldtype": "Check",
+   "label": "Enable Daily Sync (8 PM)"
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "last_sync_status",
+   "fieldtype": "Data",
+   "label": "Last Sync Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_credentials",
+   "fieldtype": "Section Break",
+   "label": "Jira API Credentials"
+  },
+  {
+   "description": "e.g., https://soxo.atlassian.net",
+   "fieldname": "jira_domain",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Jira Base URL",
+   "reqd": 1
+  },
+  {
+   "description": "Email address of the token owner.",
+   "fieldname": "jira_user_email",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Jira User Email",
+   "reqd": 1
+  },
+  {
+   "description": "Generated from Atlassian Security page.",
+   "fieldname": "jira_api_token",
+   "fieldtype": "Password",
+   "in_list_view": 1,
+   "label": "API Token",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "sb_mapping",
+   "fieldtype": "Section Break",
+   "label": "Advanced Settings"
+  },
+  {
+   "description": "If Jira assignee cannot be matched to a Frappe Employee, log the task to this user instead.",
+   "fieldname": "default_fallback_employee",
+   "fieldtype": "Link",
+   "label": "Fallback Employee",
+   "options": "Employee"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-06-12 15:12:23.000619",
+ "modified_by": "Administrator",
+ "module": "Attendance Analytics",
+ "name": "Jira Integration Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
