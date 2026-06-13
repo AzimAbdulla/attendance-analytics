@@ -257,6 +257,12 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 					inner_html = `<span style="${style}; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span>`;
 				}
 
+				// --- WORKLOG DOT INDICATOR ---
+				if (data && data._worklogs && data._worklogs[column.fieldname]) {
+					const dot_html = `<span style="width: 6px; height: 6px; background-color: #318AD8; border-radius: 50%; position: absolute; top: -3px; right: -8px; z-index: 3; border: 1px solid white;" title="${tooltip || ''}"></span>`;
+					inner_html = `<div style="position: relative; display: inline-block;">${inner_html}${dot_html}</div>`;
+				}
+
 				if (is_audit) {
 					// Absolute positioning for a perfect edge-to-edge fill inside the datatable cell
 					const audit_bg = "#e3f2fd"; // Soft, light blue

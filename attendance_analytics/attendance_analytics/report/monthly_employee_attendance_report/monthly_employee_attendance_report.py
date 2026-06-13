@@ -23,7 +23,7 @@ import frappe
 from frappe import _
 from frappe.query_builder import Case
 from frappe.query_builder.functions import Count, Extract, Sum
-from frappe.utils import cint, cstr, formatdate, getdate, get_datetime, add_days, add_months
+from frappe.utils import flt, cint, cstr, formatdate, getdate, get_datetime, add_days, add_months
 from frappe.utils.nestedset import get_descendants_of
 
 from hrms.utils import date_diff, get_date_range
@@ -108,9 +108,10 @@ def execute(filters: Filters | None = None) -> tuple:
 	leave_details_map = get_leave_details_map(filters)
 	request_map = get_request_map(filters)
 	leave_app_map = get_leave_application_map(filters)
+	worklog_map = get_worklog_map(filters)
 
 	columns = get_columns(filters)
-	data = get_data(filters, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map)
+	data = get_data(filters, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
 
 	if not data:
 		frappe.msgprint(_("No attendance records found for this criteria."), alert=True, indicator="orange")
@@ -453,7 +454,29 @@ def get_holiday_map(filters: Filters) -> dict[str, list[dict]]:
 	return holiday_map
 
 
-def get_data(filters: Filters, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict) -> list[dict]:
+def get_worklog_map(filters):
+	"""
+	Bulk fetches all Worklogs for the period.
+	Returns: { employee_id: { date_string: [logs] } }
+	"""
+	start_date, end_date = get_report_date_range(filters)
+	conditions = {"date": ["between", [start_date, end_date]]}
+	if filters.employee:
+		conditions["assignee"] = filters.employee
+	
+	logs = frappe.get_all(
+		"Worklog",
+		filters=conditions,
+		fields=["assignee", "date", "time_spent", "task"]
+	)
+	
+	worklog_map = {}
+	for log in logs:
+		worklog_map.setdefault(log.assignee, {}).setdefault(str(log.date), []).append(log)
+	return worklog_map
+
+
+def get_data(filters: Filters, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict) -> list[dict]:
 	"""Orchestrates row construction and optional grouping."""
 	employee_details, group_by_param_values = get_employee_related_details(filters)
 	holiday_map = get_holiday_map(filters)
@@ -463,14 +486,14 @@ def get_data(filters: Filters, attendance_map: dict, checkin_map: dict, leave_de
 		for parameter in group_by_param_values:
 			# Inject a group header row into the data list.
 			data.append({frappe.scrub(filters.group_by): parameter})
-			rows = get_rows(employee_details[parameter], filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map)
+			rows = get_rows(employee_details[parameter], filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
 			data.extend(rows)
 		return data
 	else:
-		return get_rows(employee_details, filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map)
+		return get_rows(employee_details, filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
 
 
-def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict) -> list[dict]:
+def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict) -> list[dict]:
 	"""Generates one row per employee, branching between Summarized and Detailed logic."""
 	records = []
 	default_holiday_list = frappe.get_cached_value("Company", filters.company, "default_holiday_list")
@@ -483,6 +506,7 @@ def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attend
 		emp_checkins = checkin_map.get(employee, {})
 		emp_requests = request_map.get(employee, {})
 		emp_leave_apps = leave_app_map.get(employee, {})
+		emp_worklogs = worklog_map.get(employee, {})
 
 		if filters.summarized_view:
 			# AGGREGATE TOTALS PATH
@@ -497,7 +521,7 @@ def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attend
 		else:
 			# DAILY MATRIX PATH
 			status_dict = attendance_map.get(employee, {})
-			row = get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps)
+			row = get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs)
 			row.update({"employee": employee, "employee_name": details.employee_name})
 			records.append(row)
 	return records
@@ -567,7 +591,7 @@ def get_leave_abbr(leave_type: str) -> str:
 	return "".join([word[0].upper() for word in str(leave_type).split() if word])
 
 
-def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps) -> dict:
+def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs) -> dict:
 	"""
 	THE CORE MATRIX LOOP:
 	- Resolves priority status for every day in the month.
@@ -575,7 +599,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 	- Builds the multi-line tooltip strings.
 	"""
 	total_days = get_dates_in_period(filters)
-	row = {"_details": {}, "_status_map": {}} # Maps for tooltips and formatter styling instructions.
+	row = {"_details": {}, "_status_map": {}, "_worklogs": {}} # Maps for tooltips, status tracking, and worklog indicators.
 	duration_view = cint(filters.get("duration_view"))
 	
 	for d in total_days:
@@ -636,6 +660,15 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 				work_duration_str = f"{int(work_seconds//3600)}h {int((work_seconds%3600)//60):02d}m"
 				tooltip_info.append(f"Work: {work_duration_str}")
 		
+		# --- WORKLOG INTEGRATION ---
+		day_worklogs = emp_worklogs.get(db_date_str, [])
+		if day_worklogs:
+			row["_worklogs"][date_str] = True
+			total_wl_hrs = sum([flt(wl.time_spent) for wl in day_worklogs])
+			wl_summary = f"📋 Worklogs: {len(day_worklogs)} tasks (Total: {total_wl_hrs} hrs)"
+			tooltip_info.append("-" * 20)
+			tooltip_info.append(wl_summary)
+
 		# Build Multi-line Tooltip for the grid
 		if status == "On Leave" and leave_details_map:
 			lt = leave_details_map.get((employee, db_date_str))
