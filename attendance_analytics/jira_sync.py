@@ -68,10 +68,17 @@ def sync_daily_worklogs():
     if not settings.enable_sync:
         return
         
-    domain = settings.jira_domain.rstrip('/')
-    email = settings.jira_user_email
-    token = settings.get_password('jira_api_token')
+    # FETCH CREDENTIALS FROM ENVIRONMENT (site_config.json)
+    domain = (frappe.conf.jira_domain or "").rstrip('/')
+    email = frappe.conf.jira_user_email
+    token = frappe.conf.jira_api_token
     
+    if not all([domain, email, token]):
+        frappe.log_error(message="Jira credentials missing in site_config.json. Sync aborted.", title="Jira Sync Error")
+        settings.last_sync_status = "Failed: Missing API Credentials in environment."
+        settings.save(ignore_permissions=True)
+        return
+
     today = nowdate()
     
     # JQL: Searches specifically for issues updated today to reduce API load
