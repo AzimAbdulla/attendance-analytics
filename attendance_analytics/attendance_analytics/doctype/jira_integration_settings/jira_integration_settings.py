@@ -2,7 +2,8 @@
 JIRA INTEGRATION SETTINGS
 -------------------------
 A Single DocType that acts as the control panel for the Jira API Sync.
-Stores credentials securely using encrypted Password fields.
+Note: Sensitive credentials (Domain, Token) have been moved to site_config.json
+for enhanced security. This DocType now only manages the sync toggle and status.
 """
 
 from frappe.model.document import Document
@@ -10,10 +11,8 @@ from frappe.model.document import Document
 class JiraIntegrationSettings(Document):
     """
     Fields:
-    - jira_domain (data): The base URL of your Atlassian instance.
-    - jira_user_email (data): The email used to generate the API Token.
-    - jira_api_token (password): The secret token (hidden/encrypted).
     - enable_sync (check): Global toggle to turn the 8 PM cron job on/off.
+    - last_sync_status (data): Read-only indicator of the last sync result.
     - default_fallback_employee (link): Used if mapping fails during sync.
     """
     pass
@@ -21,9 +20,9 @@ class JiraIntegrationSettings(Document):
 # ==============================================================================
 # WARNINGS & DEPENDENCIES
 # ==============================================================================
-# 1. ENCRYPTION: The API token is stored as a 'Password' type. It can only 
-#    be retrieved in Python using 'self.get_password()'.
+# 1. ENVIRONMENT VARIABLES: The sync engine looks for 'jira_domain', 
+#    'jira_user_email', and 'jira_api_token' inside 'frappe.conf'. 
+#    The sync will fail if these are not set via 'bench set-config'.
 #
-# 2. SINGLETON: This must remain a Single DocType. The 'jira_sync.py' script
-#    hardcodes 'frappe.get_doc("Jira Integration Settings")'.
+# 2. SINGLETON: This must remain a Single DocType.
 # ==============================================================================

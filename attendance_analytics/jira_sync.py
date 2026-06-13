@@ -5,7 +5,7 @@ This script is the core automation for pulling data from the Jira API into Frapp
 It is designed to run daily at 8 PM via a Frappe Cron Job.
 
 Key Logic:
-1. Authenticates using credentials in 'Jira Integration Settings'.
+1. Authenticates using credentials stored in site_config.json (Environment).
 2. Performs a JQL search for all issues with worklogs on the current date.
 3. Iterates through each issue and fetches individual time-entry details.
 4. Maps Jira users to Frappe Employees using the 'Jira Employee Mapping' table.
