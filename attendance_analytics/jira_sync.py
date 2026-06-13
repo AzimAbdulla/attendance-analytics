@@ -1,10 +1,32 @@
+"""
+JIRA WORKLOG SYNCHRONIZATION ENGINE
+-----------------------------------
+This script is the core automation for pulling data from the Jira API into Frappe.
+It is designed to run daily at 8 PM via a Frappe Cron Job.
+
+Key Logic:
+1. Authenticates using credentials in 'Jira Integration Settings'.
+2. Performs a JQL search for all issues with worklogs on the current date.
+3. Iterates through each issue and fetches individual time-entry details.
+4. Maps Jira users to Frappe Employees using the 'Jira Employee Mapping' table.
+5. Parses complex Atlassian Document Format (ADF) comments into clean text.
+"""
+
 import frappe
 import requests
 from requests.auth import HTTPBasicAuth
 from frappe.utils import nowdate
 
 def extract_adf_text(content_node):
-    """Recursively extracts plain text from Jira's Atlassian Document Format (ADF) JSON."""
+    """
+    Recursively extracts plain text from Jira's Atlassian Document Format (ADF).
+    
+    Arguments:
+        content_node (dict): A nested JSON node from Jira's comment object.
+        
+    Returns:
+        text (str): Cleaned, human-readable text string.
+    """
     text = ""
     if not isinstance(content_node, dict):
         return text
@@ -20,11 +42,11 @@ def extract_adf_text(content_node):
             text += extract_adf_text(child)
         text += "\n\n"
     elif node_type == "listItem":
-        text += "• "
+        text += "• " # Convert Jira list items to standard bullet points
         for child in content_node.get("content", []):
             text += extract_adf_text(child)
     else:
-        # Loop through any children
+        # Generic recursion for unknown node types (ordered lists, etc.)
         for child in content_node.get("content", []):
             text += extract_adf_text(child)
             
@@ -32,11 +54,17 @@ def extract_adf_text(content_node):
 
 def sync_daily_worklogs():
     """
-    Cron job triggered at 8 PM.
-    Fetches today's worklogs from Jira and maps them to Frappe.
+    Main Cron function. Orchestrates the 8 PM daily fetch.
+    
+    Variables:
+        domain (str): Jira base URL (e.g. https://soxo.atlassian.net).
+        email (str): Username for API authentication.
+        token (str): Encrypted API token retrieved from Settings.
+        today (str): Current date in YYYY-MM-DD format.
     """
     settings = frappe.get_doc("Jira Integration Settings")
     
+    # Skip if the user has manually disabled the sync in settings
     if not settings.enable_sync:
         return
         
@@ -45,6 +73,8 @@ def sync_daily_worklogs():
     token = settings.get_password('jira_api_token')
     
     today = nowdate()
+    
+    # JQL: Searches specifically for issues updated today to reduce API load
     jql = f'worklogDate >= "{today}" AND worklogDate <= "{today}"'
     
     search_url = f"{domain}/rest/api/3/search/jql"
@@ -55,7 +85,7 @@ def sync_daily_worklogs():
     }
     
     try:
-        # 1. Find all issues worked on today
+        # STEP 1: Identify all issues with activity
         response = requests.post(search_url, json=payload, auth=HTTPBasicAuth(email, token))
         response.raise_for_status()
         data = response.json()
@@ -63,81 +93,79 @@ def sync_daily_worklogs():
         
         synced_count = 0
         
-        # 2. Process each issue
+        # STEP 2: Process individual worklogs for each issue
         for issue in issues:
-            issue_key = issue.get("key")
+            issue_key = issue.get("key") # e.g. SOXO-123
             fields = issue.get("fields", {})
             task_title = f"{issue_key}: {fields.get('summary', 'Unknown Task')}"
             priority = fields.get("priority", {}).get("name", "")
             status = fields.get("status", {}).get("name", "")
             
-            # Fetch specific worklogs for this issue
+            # Fetch the actual time-log entries for this specific ticket
             worklog_url = f"{domain}/rest/api/3/issue/{issue_key}/worklog"
             wl_response = requests.get(worklog_url, auth=HTTPBasicAuth(email, token))
             wl_response.raise_for_status()
             worklogs = wl_response.json().get("worklogs", [])
             
             for wl in worklogs:
-                # Jira timestamps look like "2024-08-10T09:00:00.000+0530"
+                # Jira 'started' format: "2024-08-10T09:00:00.000+0530"
                 started_date = wl.get("started", "").split("T")[0]
                 
-                # Only sync logs that actually belong to 'today' 
-                # (since JQL can sometimes pull slightly wider ranges due to timezones)
+                # Filter to only 'today' to avoid redundant past syncing
                 if started_date != today:
                     continue
                     
                 wl_id = wl.get("id")
-                # Create a strict unique ID to prevent duplicates if cron runs twice
+                # unique_name (str): Strict unique key to prevent database duplicates
                 unique_name = f"JIRA-{issue_key}-{wl_id}"
                 
-                # Convert seconds to hours
+                # time_spent_hrs (float): Converts seconds to decimal hours (e.g. 1.5)
                 time_spent_hrs = wl.get("timeSpentSeconds", 0) / 3600.0
                 
-                # Extract clean text description
                 description = ""
                 if "comment" in wl:
                     description = extract_adf_text(wl["comment"]).strip()
                     
-                # --- ROBUST EMPLOYEE MAPPING LOGIC ---
+                # --- EMPLOYEE MAPPING LOGIC ---
                 jira_account_id = wl.get("author", {}).get("accountId")
                 jira_display_name = wl.get("author", {}).get("displayName", "Unknown")
                 
                 frappe_employee = None
                 
-                # Step 1: Check Mapping Table (100% Bulletproof)
+                # Priority 1: Exact Account ID match (Unbreakable)
                 if jira_account_id:
                     mapping = frappe.get_all("Jira Employee Mapping", filters={"jira_account_id": jira_account_id}, pluck="employee", limit=1)
                     if mapping:
                         frappe_employee = mapping[0]
                         
-                # Step 2: Fallback to Fuzzy Name Match (If mapping table isn't filled out yet)
+                # Priority 2: Exact Name match (Fallback)
                 if not frappe_employee and jira_display_name != "Unknown":
                     emp = frappe.get_all("Employee", filters={"employee_name": jira_display_name}, pluck="name", limit=1)
                     if emp:
                         frappe_employee = emp[0]
-                        # Optional: Could auto-create mapping here to save HR time
                         
-                # Step 3: Fallback to global setting
+                # Priority 3: Global Fallback Setting (Safety net)
                 if not frappe_employee:
                     frappe_employee = settings.default_fallback_employee
                     
-                # Step 4: Abort if mapping completely failed
                 if not frappe_employee:
-                    frappe.log_error(message=f"Could not map Jira user '{jira_display_name}' (ID: {jira_account_id}) to Frappe Employee. Skipping worklog {wl_id}.", title="Jira Sync Warning")
+                    # Log error if no mapping is possible
+                    frappe.log_error(message=f"Jira user '{jira_display_name}' could not be mapped to any Frappe Employee. Log skipped.", title="Jira Sync Warning")
                     continue
                 
-                # Upsert to Frappe Worklog
+                # SAVE DATA TO FRAPPE
                 if frappe.db.exists("Worklog", unique_name):
+                    # Update existing record
                     doc = frappe.get_doc("Worklog", unique_name)
                     doc.time_spent = time_spent_hrs
                     doc.description = description
-                    doc.status = status # Update status in case it moved to QA/Done
-                    # Do not overwrite assignee if it was manually corrected by HR later
+                    doc.status = status 
                     doc.save(ignore_permissions=True)
                 else:
+                    # Create new record
                     doc = frappe.get_doc({
                         "doctype": "Worklog",
-                        "name": unique_name, # Overrides autoname to use our safe Jira ID
+                        "name": unique_name,
                         "date": started_date,
                         "assignee": frappe_employee,
                         "priority": priority,
@@ -150,13 +178,24 @@ def sync_daily_worklogs():
                     
                 synced_count += 1
                 
-        # Update settings status
-        settings.last_sync_status = f"Success: Synced {synced_count} logs on {frappe.utils.now_datetime().strftime('%Y-%m-%d %H:%M')}"
+        # Final Status Update
+        settings.last_sync_status = f"Success: {synced_count} logs synced at {frappe.utils.now_datetime()}"
         settings.save(ignore_permissions=True)
         frappe.db.commit()
         
     except Exception as e:
-        frappe.log_error(message=str(e), title="Jira Worklog Sync Failed")
-        settings.last_sync_status = f"Failed on {frappe.utils.now_datetime().strftime('%Y-%m-%d %H:%M')}"
+        frappe.log_error(message=str(e), title="Jira Worklog Sync Crash")
+        settings.last_sync_status = f"Failed: {str(e)}"
         settings.save(ignore_permissions=True)
         frappe.db.commit()
+
+# ==============================================================================
+# WARNINGS & DEPENDENCIES
+# ==============================================================================
+# 1. API LIMITS: This script uses a 1000 maxResults limit. Large organizations
+#    with thousands of logs per day may need to implement pagination.
+#
+# 2. PRIVACY: If Jira emails are hidden, the 'accountId' mapping is the ONLY
+#    bulletproof way to link employees. Ensure 'Jira Employee Mapping' is 
+#    filled for every user.
+# ==============================================================================

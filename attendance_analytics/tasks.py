@@ -1,13 +1,29 @@
+"""
+WFH BACKGROUND TASKS
+--------------------
+Contains automated jobs that run periodically via the Frappe Scheduler.
+Managed through the 'scheduler_events' in hooks.py.
+"""
+
 import frappe
 from frappe.utils import now_datetime, add_to_date
 
 def check_missed_heartbeats():
-    """Scheduled job running every 5 minutes to close stale sessions."""
+    """
+    STALE SESSION WATCHDOG
+    Runs every 1 minute.
+    
+    Logic:
+    1. Finds all 'WFH Session' documents with status 'Active'.
+    2. Compares 'last_heartbeat' against the 3-minute cutoff.
+    3. If an employee's machine has stopped sending signals, it auto-logs them out.
+    """
     now = now_datetime()
-    # 15 minutes ago
+    
+    # cutoff_time (datetime): Current time minus 3 minutes.
+    # Sessions with heartbeats older than this are considered 'Disconnected'.
     cutoff_time = add_to_date(now, minutes=-3)
     
-    # Find active sessions with missed heartbeats
     stale_sessions = frappe.get_all(
         "WFH Session", 
         filters={
@@ -18,7 +34,8 @@ def check_missed_heartbeats():
     )
     
     for session in stale_sessions:
-        # Create Checkin OUT at the time of the last successful heartbeat
+        # Create an official 'OUT' log to stop the attendance timer.
+        # We use the time of the LAST successful heartbeat for accuracy.
         checkin = frappe.get_doc({
             "doctype": "Employee Checkin",
             "employee": session.employee,
@@ -28,7 +45,7 @@ def check_missed_heartbeats():
         })
         checkin.insert(ignore_permissions=True)
         
-        # Close the Session
+        # Formally close the tracking session.
         frappe.db.set_value("WFH Session", session.name, {
             "status": "Closed",
             "session_end": session.last_heartbeat
