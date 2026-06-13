@@ -258,8 +258,14 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				}
 
 				// --- WORKLOG DOT INDICATOR ---
-				if (data && data._worklogs && data._worklogs[column.fieldname]) {
-					const dot_html = `<span style="width: 6px; height: 6px; background-color: #318AD8; border-radius: 50%; position: absolute; top: -3px; right: -8px; z-index: 3; border: 1px solid white;" title="${tooltip || ''}"></span>`;
+				const active_presence = ["Present", "Work From Home", "Half Day/Other Half Present", "Half Day/Other Half Absent", "Half Day", "Present (Unmarked)", "Present (Requested)", "WFH (Requested)"];
+				const has_worklog = data && data._worklogs && data._worklogs[column.fieldname];
+				const is_active_day = active_presence.includes(status);
+
+				if (has_worklog || is_active_day) {
+					const dot_color = has_worklog ? "#318AD8" : "#e74c3c"; // Blue if logged, Red if missing
+					const dot_title = has_worklog ? (tooltip || "") : __("No worklogs found for this day");
+					const dot_html = `<span style="width: 8px; height: 8px; background-color: ${dot_color}; border-radius: 50%; position: absolute; top: -4px; right: -10px; z-index: 3; border: 1px solid white;" title="${dot_title}"></span>`;
 					inner_html = `<div style="position: relative; display: inline-block;">${inner_html}${dot_html}</div>`;
 				}
 
