@@ -14,13 +14,16 @@ The fundamental tool for data correction and HR compliance. It provides a 1-row-
 - **Dynamic View Toggles**:
     - **Status View**: Shows traditional attendance markers (P, A, L, WFH, WO, H).
     - **Duration View**: Replaces markers with actual hours worked (e.g., 8h 45m).
-- **Interactive Heatmap**: Automatically highlights work intensity:
-    - **Green (>= 7h)**: Full productivity.
-    - **Yellow (6h - 7h)**: Warning/Short hours.
-    - **Red (< 6h)**: Non-compliant/Missing logs.
+- **Interactive Heatmap**: Automatically highlights work intensity (Green >= 7h, Yellow 6h-7h, Red < 6h).
 - **One-Click Audit**: Click any duration to drill down into the raw biometric punches for that specific day.
 
-### 2. The Scorecard (Monthly Attendance Performance Report)
+### 2. Productivity Monitoring (The Indicator System)
+The Audit Matrix includes a visual correlation between physical presence and actual work output:
+- **Blue Dot Indicator (`#2196F3`)**: Appears if the employee has successfully logged work tasks for that day.
+- **Red Dot Indicator (`#F44336`)**: Appears if an employee was "Active" (Present, WFH, or has Check-ins) but logged **Zero** tasks.
+- **Visuals**: High-visibility 8px vibrant dots with detailed tooltips showing: `📋 Worklogs: [Count] tasks (Total: [X] hrs)`.
+
+### 3. The Scorecard (Monthly Attendance Performance Report)
 Automated performance ranking and organizational compliance grading.
 - **Deductive Scoring Engine**: Starts every employee at a base score and applies deductions based on organizational rules (Late, Absent, etc.).
 - **KPI Columns**:
