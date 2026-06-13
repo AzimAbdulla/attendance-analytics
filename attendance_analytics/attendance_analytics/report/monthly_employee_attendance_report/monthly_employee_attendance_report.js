@@ -263,7 +263,7 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				const is_active_day = active_presence.includes(status);
 
 				if (has_worklog || is_active_day) {
-					const dot_color = has_worklog ? "#318AD8" : "#e74c3c"; // Previous colors
+					const dot_color = has_worklog ? "#2196F3" : "#F44336"; // Vibrant Material Colors
 					const dot_title = has_worklog ? (tooltip || "") : __("No worklogs found for this day");
 					const dot_html = `<span style="width: 8px; height: 8px; background-color: ${dot_color}; border-radius: 50%; position: absolute; top: -4px; right: -10px; z-index: 3; border: 1px solid white;" title="${dot_title}"></span>`;
 					inner_html = `<div style="position: relative; display: inline-block;">${inner_html}${dot_html}</div>`;
