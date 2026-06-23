@@ -11,7 +11,7 @@ from frappe.model.document import Document
 class JiraIntegrationSettings(Document):
     """
     Fields:
-    - enable_sync (check): Global toggle to turn the 8 PM cron job on/off.
+    - enable_sync (check): Global toggle to turn the 8 AM cron job on/off.
     - last_sync_status (data): Read-only indicator of the last sync result.
     - default_fallback_employee (link): Used if mapping fails during sync.
     """

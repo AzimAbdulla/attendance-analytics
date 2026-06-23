@@ -119,7 +119,7 @@ Use this DocType to define office timings, grace periods, penalty weights, and o
 
 > [!IMPORTANT]
 > **Frappe Scheduler Must Be Enabled**
-> The real-time WFH monitoring, auto-logout, and 8 PM Jira Sync **will not work** if your site's scheduler is paused. 
+> The real-time WFH monitoring, auto-logout, and 8 AM Jira Sync **will not work** if your site's scheduler is paused. 
 > To verify and enable, run:
 > `bench --site [your-site-name] scheduler resume`
 
