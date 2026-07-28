@@ -27,6 +27,7 @@ from frappe.utils import flt, cint, cstr, formatdate, getdate, get_datetime, add
 from frappe.utils.nestedset import get_descendants_of
 
 from hrms.utils import date_diff, get_date_range
+from hrms.hr.doctype.leave_application.leave_application import get_leave_balance_on, get_leave_allocation_records
 
 Filters = frappe._dict
 
@@ -66,6 +67,18 @@ STATUS_PRIORITY = {
 }
 
 day_abbr = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+# EXTENDED_LEAVE_TYPE_MAP: short key -> actual Leave Type name, used to build the
+# fixed payroll-style summary columns (Casual/Sick/Earned Leave with allocated/taken/
+# balance, Holiday Duty, Compensatory Off, Leave Without Pay).
+EXTENDED_LEAVE_TYPE_MAP = {
+	"cl": "Casual Leave",
+	"sl": "Sick Leave",
+	"el": "Privilege Leave",  # Shown as "Earned Leave (EL)" in the report
+	"hd": "Holiday Duty",
+	"co": "Compensatory Off",
+	"lwp": "Leave Without Pay",  # Shown as "Additional Leave Taken"
+}
 
 
 def execute(filters: Filters | None = None) -> tuple:
@@ -309,6 +322,24 @@ def get_columns(filters: Filters) -> list[dict]:
 		# Monthly Aggregate Columns
 		columns.extend([
 			{"label": _("Total Working Days"), "fieldname": "total_working_days", "fieldtype": "Float", "width": 130},
+			{"label": _("Total Worked Days"), "fieldname": "total_worked_days", "fieldtype": "Float", "width": 130},
+			{"label": _("Half Day Leave"), "fieldname": "half_day_leave", "fieldtype": "Float", "width": 110},
+			{"label": _("Full Day leave"), "fieldname": "full_day_leave", "fieldtype": "Float", "width": 110},
+			{"label": _("Casual Leave (C)"), "fieldname": "cl_allocated", "fieldtype": "Float", "width": 120},
+			{"label": _("CL Taken"), "fieldname": "cl_taken", "fieldtype": "Float", "width": 100},
+			{"label": _("CL Balance"), "fieldname": "cl_balance", "fieldtype": "Float", "width": 100},
+			{"label": _("Sick Leave (S)"), "fieldname": "sl_allocated", "fieldtype": "Float", "width": 120},
+			{"label": _("SL Taken"), "fieldname": "sl_taken", "fieldtype": "Float", "width": 100},
+			{"label": _("SL Balance"), "fieldname": "sl_balance", "fieldtype": "Float", "width": 100},
+			{"label": _("Earned Leave (EL)"), "fieldname": "el_allocated", "fieldtype": "Float", "width": 120},
+			{"label": _("EL Taken"), "fieldname": "el_taken", "fieldtype": "Float", "width": 100},
+			{"label": _("EL Balance"), "fieldname": "el_balance", "fieldtype": "Float", "width": 100},
+			{"label": _("Holiday Duty taken (HD)"), "fieldname": "hd_taken", "fieldtype": "Float", "width": 150},
+			{"label": _("Compensatory leave taken (CO)"), "fieldname": "co_taken", "fieldtype": "Float", "width": 170},
+			{"label": _("HD balance"), "fieldname": "hd_balance", "fieldtype": "Float", "width": 110},
+			{"label": _("Total Leave this month"), "fieldname": "total_leave_this_month", "fieldtype": "Float", "width": 140},
+			{"label": _("Additional Leave Taken"), "fieldname": "additional_leave_taken", "fieldtype": "Float", "width": 140},
+			{"label": _("WFH"), "fieldname": "total_wfh", "fieldtype": "Float", "width": 90},
 			{"label": _("Total Present"), "fieldname": "total_present", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Half Days"), "fieldname": "total_half_days", "fieldtype": "Float", "width": 110},
 			{"label": _("Total Leaves"), "fieldname": "total_leaves", "fieldtype": "Float", "width": 110},
@@ -334,11 +365,14 @@ def get_columns(filters: Filters) -> list[dict]:
 
 
 def get_columns_for_days(filters: Filters) -> list[dict]:
-	"""Generates column metadata for the daily matrix view."""
+	"""Generates column metadata for the daily matrix view. Sundays are skipped
+	(no column shown) since they're always a weekly off."""
 	days = []
 	dates = get_dates_in_period(filters)
 	for d in dates:
 		d = getdate(d)
+		if d.weekday() == 6:  # Sunday
+			continue
 		# fieldname (str): Formatted as DD-MM-YYYY (Match key used in row building).
 		days.append({"label": f"{d.day} {d.strftime('%b')} ({day_abbr[d.weekday()]})", "fieldname": d.strftime("%d-%m-%Y"), "fieldtype": "Data", "width": 100})
 	return days
@@ -515,8 +549,12 @@ def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attend
 			row = {"employee": employee, "employee_name": details.employee_name}
 			set_defaults_for_summarized_view(filters, row)
 			row.update(attendance)
-			row.update(get_leave_summary(employee, filters))
+			leave_taken_by_type = get_leave_summary(employee, filters)
+			row.update(leave_taken_by_type)
 			row.update(get_entry_exits_summary(employee, filters))
+			row.update(get_extended_leave_summary(employee, filters, leave_taken_by_type))
+			row.update(get_derived_summary_fields(row))
+			row["total_wfh"] = get_wfh_count(employee, filters)
 			records.append(row)
 		else:
 			# DAILY MATRIX PATH
@@ -536,31 +574,46 @@ def set_defaults_for_summarized_view(filters, row):
 def get_attendance_status_for_summarized_view(employee, filters, holidays, joined_in_current_period, joined_date, attendance_map, emp_checkins, emp_requests, emp_leave_apps) -> dict:
 	"""Calculates high-level monthly counts (Working Days, Present, Holidays, etc.)."""
 	summary, attendance_days = get_attendance_summary_and_days(employee, filters)
-	total_days = get_dates_in_period(filters)
+	# Cap at today for ongoing periods, so "Total Working Days" reflects what's
+	# actually elapsed so far rather than assuming the whole (unfinished) period.
+	today = getdate()
+	total_days = [d for d in get_dates_in_period(filters) if getdate(d) <= today]
 	total_holidays = 0
-	
+	# unmarked_present_days: days with raw checkin logs but no official Attendance
+	# doc yet ("Present (Unmarked)" in the daily grid). Days with a *pending*
+	# Leave Application/Attendance Request are NOT counted here — same ghost-status
+	# priority as the daily grid, just not confirmed/approved yet.
+	unmarked_present_days = 0
+
 	for d in total_days:
 		d = getdate(d)
 		# date_str (str): Database key string (YYYY-MM-DD).
 		date_str = str(d)
 		# Skip days where an official attendance doc already exists or joining hasn't happened.
 		if d.day in attendance_days or (joined_in_current_period and d < joined_date): continue
-		
+
 		status = get_holiday_status(d, holidays)
-		if status in ["Weekly Off", "Holiday"]: total_holidays += 1
-	
-	if not any(summary.values()) and not total_holidays: return {}
-	
+		if status in ["Weekly Off", "Holiday"]:
+			total_holidays += 1
+			continue
+
+		if emp_leave_apps.get(date_str) or emp_requests.get(date_str):
+			continue
+		if emp_checkins.get(date_str):
+			unmarked_present_days += 1
+
+	if not any(summary.values()) and not total_holidays and not unmarked_present_days: return {}
+
 	# total_working_days (int): denominator for performance (Period days - contractual offs).
 	total_working_days = len(total_days) - total_holidays
 
 	return {
 		"total_working_days": total_working_days,
-		"total_present": (summary.total_present or 0), 
+		"total_present": (summary.total_present or 0) + unmarked_present_days,
 		# Multiplying by 2 turns 0.5 half-day increments back into whole counts (e.g. 1 half day).
-		"total_half_days": (summary.total_half_days or 0) * 2, 
-		"total_leaves": (summary.total_leaves or 0), 
-		"total_absent": (summary.total_absent or 0), 
+		"total_half_days": (summary.total_half_days or 0) * 2,
+		"total_leaves": (summary.total_leaves or 0),
+		"total_absent": (summary.total_absent or 0),
 		"total_holidays": total_holidays
 	}
 
@@ -717,6 +770,66 @@ def get_entry_exits_summary(employee, filters) -> dict:
 	Attendance = frappe.qb.DocType("Attendance")
 	entry_exits = (frappe.qb.from_(Attendance).select(Count(frappe.qb.terms.Case().when(Attendance.late_entry == "1", "1")).as_("total_late_entries"), Count(frappe.qb.terms.Case().when(Attendance.early_exit == "1", "1")).as_("total_early_exits")).where((Attendance.docstatus == 1) & (Attendance.employee == employee) & (Attendance.company.isin(filters.companies)) & (get_date_condition(Attendance.attendance_date, filters)))).run(as_dict=True)
 	return entry_exits[0]
+
+
+def get_wfh_count(employee, filters) -> float:
+	"""Counts 'Work From Home' attendance days for the period (Summarized View)."""
+	Attendance = frappe.qb.DocType("Attendance")
+	sum_wfh = Sum(frappe.qb.terms.Case().when(Attendance.status == "Work From Home", 1).else_(0)).as_("total_wfh")
+	result = (frappe.qb.from_(Attendance).select(sum_wfh).where((Attendance.docstatus == 1) & (Attendance.employee == employee) & (Attendance.company.isin(filters.companies)) & (get_date_condition(Attendance.attendance_date, filters)))).run(as_dict=True)
+	return flt(result[0].total_wfh) if result else 0.0
+
+
+def get_leave_balance_safe(employee, leave_type, as_of_date) -> float:
+	"""Wraps hrms's get_leave_balance_on — some employees may lack a leave allocation
+	or leave access setup for a given type; degrade to 0 rather than breaking the report."""
+	try:
+		return flt(get_leave_balance_on(employee, leave_type, as_of_date))
+	except Exception:
+		return 0.0
+
+
+def get_extended_leave_summary(employee, filters, leave_taken_by_type: dict) -> dict:
+	"""
+	Builds the fixed payroll-style columns for Casual/Sick/Earned Leave (allocated,
+	taken, balance), Holiday Duty (taken, balance), Compensatory Off (taken), and
+	Leave Without Pay (shown as "Additional Leave Taken").
+	"""
+	_, end_date = get_report_date_range(filters)
+	row = {}
+
+	for key, leave_type in EXTENDED_LEAVE_TYPE_MAP.items():
+		taken = flt(leave_taken_by_type.get(frappe.scrub(leave_type)))
+
+		if key == "lwp":
+			row["additional_leave_taken"] = taken
+		elif key == "co":
+			row["co_taken"] = taken
+		elif key == "hd":
+			row["hd_taken"] = taken
+			row["hd_balance"] = get_leave_balance_safe(employee, leave_type, end_date)
+		else:
+			allocation_records = get_leave_allocation_records(employee, end_date, leave_type)
+			allocation = allocation_records.get(leave_type)
+			row[f"{key}_allocated"] = flt(allocation.total_leaves_allocated) if allocation else 0.0
+			row[f"{key}_taken"] = taken
+			row[f"{key}_balance"] = get_leave_balance_safe(employee, leave_type, end_date)
+
+	return row
+
+
+def get_derived_summary_fields(row: dict) -> dict:
+	"""Fields computed purely from already-aggregated summary numbers on the row."""
+	total_present = flt(row.get("total_present"))
+	total_half_days = flt(row.get("total_half_days"))
+	total_leaves = flt(row.get("total_leaves"))
+
+	return {
+		"total_worked_days": total_present + total_half_days * 0.5,
+		"half_day_leave": total_half_days,
+		"full_day_leave": total_leaves,
+		"total_leave_this_month": total_leaves + total_half_days * 0.5,
+	}
 
 
 @frappe.whitelist()
