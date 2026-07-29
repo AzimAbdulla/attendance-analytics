@@ -122,16 +122,22 @@ def execute(filters: Filters | None = None) -> tuple:
 	request_map = get_request_map(filters)
 	leave_app_map = get_leave_application_map(filters)
 	worklog_map = get_worklog_map(filters)
+	shift_variance_map = get_shift_variance_map(filters)
 
 	columns = get_columns(filters)
-	data = get_data(filters, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
+	data = get_data(filters, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map, shift_variance_map)
 
 	if not data:
 		frappe.msgprint(_("No attendance records found for this criteria."), alert=True, indicator="orange")
 		return columns, [], None, None
 
 	message = get_message() if not filters.summarized_view else ""
-	chart = get_chart_data(attendance_map, filters)
+
+	# Scope the chart to the same employees shown in the table below — otherwise
+	# Department/Branch/Employee filters would appear to have no effect on the chart.
+	shown_employees = {row.get("employee") for row in data if row.get("employee")}
+	chart_attendance_map = {emp: days for emp, days in attendance_map.items() if emp in shown_employees}
+	chart = get_chart_data(chart_attendance_map, filters)
 
 	return columns, data, message, chart
 
@@ -448,9 +454,9 @@ def get_employee_related_details(filters: Filters) -> tuple[dict, list]:
 			Case().when(joining_date_condition, 1).else_(0).as_("joined_in_current_period")
 		)
 		.where(Employee.company.isin(filters.companies)))
-	
+
 	if filters.employee: query = query.where(Employee.name == filters.employee)
-	if filters.department and filters.department != "All Departments": query = query.where(Employee.department == filters.department)
+	if filters.department: query = query.where(Employee.department.isin(filters.department))
 	if filters.branch: query = query.where(Employee.branch == filters.branch)
 	
 	group_by = filters.group_by
@@ -510,42 +516,83 @@ def get_worklog_map(filters):
 	return worklog_map
 
 
-def get_data(filters: Filters, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict) -> list[dict]:
+def get_shift_variance_map(filters):
+	"""
+	Bulk fetches approved Shift Variance Form records for the period. Only
+	"Approved" is counted — Draft/Pending states haven't been signed off yet,
+	and "Rejected" shouldn't add time either (both share docstatus=1 via the
+	doctype's workflow, so status itself has to be checked, not docstatus).
+
+	Returns: { employee_id: { date_string: {"seconds": float, "notes": [category, ...]} } }
+	"""
+	start_date, end_date = get_report_date_range(filters)
+	conditions = {
+		"availed_date": ["between", [start_date, end_date]],
+		"status": "Approved",
+	}
+	if filters.employee:
+		conditions["name1"] = filters.employee
+
+	records = frappe.get_all(
+		"Shift Variance Form",
+		filters=conditions,
+		fields=["name1 as employee", "availed_date", "duration", "select_any_one"],
+	)
+
+	shift_variance_map = {}
+	for r in records:
+		seconds = r.duration.total_seconds() if r.duration else 0
+		if seconds <= 0:
+			continue
+		day_entry = shift_variance_map.setdefault(r.employee, {}).setdefault(str(r.availed_date), {"seconds": 0, "notes": []})
+		day_entry["seconds"] += seconds
+		day_entry["notes"].append(r.select_any_one)
+
+	return shift_variance_map
+
+
+def get_data(filters: Filters, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict, shift_variance_map: dict) -> list[dict]:
 	"""Orchestrates row construction and optional grouping."""
 	employee_details, group_by_param_values = get_employee_related_details(filters)
 	holiday_map = get_holiday_map(filters)
-	
+
 	if filters.group_by:
 		data = []
 		for parameter in group_by_param_values:
 			# Inject a group header row into the data list.
 			data.append({frappe.scrub(filters.group_by): parameter})
-			rows = get_rows(employee_details[parameter], filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
+			rows = get_rows(employee_details[parameter], filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map, shift_variance_map)
 			data.extend(rows)
 		return data
 	else:
-		return get_rows(employee_details, filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map)
+		return get_rows(employee_details, filters, holiday_map, attendance_map, checkin_map, leave_details_map, request_map, leave_app_map, worklog_map, shift_variance_map)
 
 
-def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict) -> list[dict]:
+def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attendance_map: dict, checkin_map: dict, leave_details_map: dict, request_map: dict, leave_app_map: dict, worklog_map: dict, shift_variance_map: dict) -> list[dict]:
 	"""Generates one row per employee, branching between Summarized and Detailed logic."""
 	records = []
 	default_holiday_list = frappe.get_cached_value("Company", filters.company, "default_holiday_list")
-	
+
 	for employee, details in employee_details.items():
 		emp_holiday_list = details.holiday_list or default_holiday_list
 		holidays = holiday_map.get(emp_holiday_list)
-		
+
 		# Individual employee dictionaries for constant-time daily lookups.
+		emp_attendance = attendance_map.get(employee, {})
 		emp_checkins = checkin_map.get(employee, {})
 		emp_requests = request_map.get(employee, {})
 		emp_leave_apps = leave_app_map.get(employee, {})
 		emp_worklogs = worklog_map.get(employee, {})
+		emp_shift_variance = shift_variance_map.get(employee, {})
+
+		# Show an employee (Active, Inactive, or Left) only if they actually have
+		# some activity for the period — not gated on status at all.
+		has_data = emp_attendance or emp_checkins or emp_requests or emp_leave_apps or emp_worklogs or emp_shift_variance
+		if not has_data: continue
 
 		if filters.summarized_view:
 			# AGGREGATE TOTALS PATH
 			attendance = get_attendance_status_for_summarized_view(employee, filters, holidays, details.joined_in_current_period, details.joined_date, attendance_map, emp_checkins, emp_requests, emp_leave_apps)
-			if not attendance: continue
 			row = {"employee": employee, "employee_name": details.employee_name}
 			set_defaults_for_summarized_view(filters, row)
 			row.update(attendance)
@@ -559,7 +606,7 @@ def get_rows(employee_details: dict, filters: Filters, holiday_map: dict, attend
 		else:
 			# DAILY MATRIX PATH
 			status_dict = attendance_map.get(employee, {})
-			row = get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs)
+			row = get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs, emp_shift_variance)
 			row.update({"employee": employee, "employee_name": details.employee_name})
 			records.append(row)
 	return records
@@ -581,9 +628,12 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 	total_holidays = 0
 	# unmarked_present_days: days with raw checkin logs but no official Attendance
 	# doc yet ("Present (Unmarked)" in the daily grid). Days with a *pending*
-	# Leave Application/Attendance Request are NOT counted here — same ghost-status
-	# priority as the daily grid, just not confirmed/approved yet.
+	# Leave Application/Attendance Request are only folded in here (and into
+	# requested_leave_days) when the "Request" filter is checked, matching how
+	# the daily grid displays them as approved once that toggle is on.
 	unmarked_present_days = 0
+	requested_leave_days = 0
+	count_requests_as_approved = cint(filters.get("request"))
 
 	for d in total_days:
 		d = getdate(d)
@@ -597,12 +647,14 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 			total_holidays += 1
 			continue
 
-		if emp_leave_apps.get(date_str) or emp_requests.get(date_str):
+		if emp_leave_apps.get(date_str):
+			if count_requests_as_approved: requested_leave_days += 1
+			continue
+		if emp_requests.get(date_str):
+			if count_requests_as_approved: unmarked_present_days += 1
 			continue
 		if emp_checkins.get(date_str):
 			unmarked_present_days += 1
-
-	if not any(summary.values()) and not total_holidays and not unmarked_present_days: return {}
 
 	# total_working_days (int): denominator for performance (Period days - contractual offs).
 	total_working_days = len(total_days) - total_holidays
@@ -612,7 +664,7 @@ def get_attendance_status_for_summarized_view(employee, filters, holidays, joine
 		"total_present": (summary.total_present or 0) + unmarked_present_days,
 		# Multiplying by 2 turns 0.5 half-day increments back into whole counts (e.g. 1 half day).
 		"total_half_days": (summary.total_half_days or 0) * 2,
-		"total_leaves": (summary.total_leaves or 0),
+		"total_leaves": (summary.total_leaves or 0) + requested_leave_days,
 		"total_absent": (summary.total_absent or 0),
 		"total_holidays": total_holidays
 	}
@@ -644,7 +696,7 @@ def get_leave_abbr(leave_type: str) -> str:
 	return "".join([word[0].upper() for word in str(leave_type).split() if word])
 
 
-def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs) -> dict:
+def get_attendance_status_for_detailed_view(employee, filters, status_dict, holidays, emp_checkins, leave_details_map, emp_requests, emp_leave_apps, emp_worklogs, emp_shift_variance) -> dict:
 	"""
 	THE CORE MATRIX LOOP:
 	- Resolves priority status for every day in the month.
@@ -686,32 +738,48 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 		tooltip_info = []
 		work_duration_str = "0h 00m"
 		day_logs = emp_checkins.get(db_date_str, [])
-		
+		work_seconds = 0
+		break_seconds = 0
+
 		if day_logs:
 			# tooltip_info (list): Collects times and durations for the hover bubble.
 			tooltip_info.extend([f"IN: {day_logs[0].time.strftime('%H:%M')}", f"OUT: {day_logs[-1].time.strftime('%H:%M')}"])
-			
-			work_seconds = 0
+
 			clusters = []
-			
+
 			# Group sequential punch types: [IN, IN, OUT, OUT] -> [(IN, logs), (OUT, logs)]
-			for log_type, group in groupby(day_logs, key=lambda x: x.log_type): 
+			for log_type, group in groupby(day_logs, key=lambda x: x.log_type):
 				clusters.append((log_type, list(group)))
-			
-			# Greedily match an IN cluster with the following OUT cluster.
+
+			# Greedily match an IN cluster with the following OUT cluster, and separately
+			# tally the gaps between an OUT cluster and the next IN cluster as break time.
 			for i in range(len(clusters) - 1):
-				if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT": 
+				if clusters[i][0] == "IN" and clusters[i+1][0] == "OUT":
 					# duration: Interval between FIRST log of cluster and LAST log of next cluster.
 					work_seconds += (clusters[i+1][1][-1].time - clusters[i][1][0].time).total_seconds()
-			
+				elif clusters[i][0] == "OUT" and clusters[i+1][0] == "IN":
+					break_seconds += (clusters[i+1][1][0].time - clusters[i][1][-1].time).total_seconds()
+
 			# FALLBACK: If Greedy math is 0 due to punch errors but status is Present, use span logic.
 			if work_seconds <= 0 and status in ["Present", "Work From Home", "Half Day", "Present (Unmarked)", "Present (Requested)", "WFH (Requested)"]:
 				work_seconds = (day_logs[-1].time - day_logs[0].time).total_seconds()
-			
-			if work_seconds > 0:
-				# work_duration_str (str): Formatted output string (e.g. '8h 30m').
-				work_duration_str = f"{int(work_seconds//3600)}h {int((work_seconds%3600)//60):02d}m"
-				tooltip_info.append(f"Work: {work_duration_str}")
+
+		# Approved Shift Variance Form time (Overtime/Late Arrival/Early Leave/etc.) is
+		# added on top of the checkin-derived duration for the same day.
+		variance = emp_shift_variance.get(db_date_str)
+		if variance:
+			work_seconds += variance["seconds"]
+			variance_str = f"{int(variance['seconds']//3600)}h {int((variance['seconds']%3600)//60):02d}m"
+			tooltip_info.append(f"Shift Variance ({', '.join(variance['notes'])}): +{variance_str}")
+
+		if work_seconds > 0:
+			# work_duration_str (str): Formatted output string (e.g. '8h 30m').
+			work_duration_str = f"{int(work_seconds//3600)}h {int((work_seconds%3600)//60):02d}m"
+			tooltip_info.append(f"Work: {work_duration_str}")
+
+		if break_seconds > 0:
+			break_str = f"{int(break_seconds//3600)}h {int((break_seconds%3600)//60):02d}m"
+			tooltip_info.append(f"Break: {break_str}")
 		
 		# --- WORKLOG INTEGRATION ---
 		day_worklogs = emp_worklogs.get(db_date_str, [])
