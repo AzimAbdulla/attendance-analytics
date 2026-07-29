@@ -2,11 +2,11 @@
 JIRA WORKLOG SYNCHRONIZATION ENGINE
 -----------------------------------
 This script is the core automation for pulling data from the Jira API into Frappe.
-It is designed to run daily at 8 AM via a Frappe Cron Job to sync the previous day's worklogs.
+It is designed to run nightly at 8 PM via a Frappe Cron Job to sync the current day's worklogs.
 
 Key Logic:
 1. Authenticates using credentials stored in site_config.json (Environment).
-2. Performs a JQL search for all issues with worklogs on the previous day.
+2. Performs a JQL search for all issues with worklogs on the current day.
 3. Iterates through each issue and fetches individual time-entry details.
 4. Maps Jira users to Frappe Employees using the 'Jira Employee Mapping' table.
 5. Parses Atlassian Document Format (ADF) comments.
@@ -16,7 +16,7 @@ Key Logic:
 import frappe
 import requests
 from requests.auth import HTTPBasicAuth
-from frappe.utils import add_days, nowdate
+from frappe.utils import nowdate
 
 def extract_adf_text(content_node):
     """
@@ -55,13 +55,13 @@ def extract_adf_text(content_node):
 
 def sync_daily_worklogs():
     """
-    Main Cron function. Orchestrates the 8 AM daily fetch.
-    
+    Main Cron function. Orchestrates the 8 PM nightly fetch.
+
     Variables:
         domain (str): Jira base URL (e.g. https://soxo.atlassian.net).
         email (str): Username for API authentication.
         token (str): Encrypted API token retrieved from Settings.
-        target_date (str): Target date to sync (previous day) in YYYY-MM-DD format.
+        target_date (str): Target date to sync (today) in YYYY-MM-DD format.
     """
     settings = frappe.get_doc("Jira Integration Settings")
     
@@ -80,7 +80,7 @@ def sync_daily_worklogs():
         settings.save(ignore_permissions=True)
         return
 
-    target_date = add_days(nowdate(), -1)
+    target_date = nowdate()
     
     # JQL: Searches specifically for issues updated on target_date to reduce API load
     jql = f'worklogDate >= "{target_date}" AND worklogDate <= "{target_date}"'

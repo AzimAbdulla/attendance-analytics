@@ -231,7 +231,8 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 						display_value = "WFH";
 					} else if (status === "Leave (Requested)") {
 						effective_status = "On Leave";
-						display_value = "L";
+						const pending_abbr = data._pending_leave_type && data._pending_leave_type[column.fieldname];
+						display_value = pending_abbr ? `L(${pending_abbr})` : "L";
 					}
 				}
 
