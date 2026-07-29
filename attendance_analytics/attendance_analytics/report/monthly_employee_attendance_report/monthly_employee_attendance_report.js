@@ -94,15 +94,13 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 		{
 			fieldname: "department",
 			label: __("Department"),
-			fieldtype: "Link",
+			fieldtype: "MultiSelectList",
 			options: "Department",
-			get_query: () => {
+			get_data: function (txt) {
 				var company = frappe.query_report.get_filter_value("company");
-				return {
-					filters: {
-						company: company,
-					},
-				};
+				return frappe.db.get_link_options("Department", txt, {
+					company: company,
+				});
 			},
 		},
 		{
@@ -144,6 +142,15 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 				if (report.get_filter_value("duration_view")) {
 					report.set_filter_value("summarized_view", 0);
 				}
+				report.refresh();
+			},
+		},
+		{
+			fieldname: "request",
+			label: __("With Request"),
+			fieldtype: "Check",
+			default: 0,
+			on_change: (report) => {
 				report.refresh();
 			},
 		},
@@ -209,22 +216,41 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 
 				let style = "";
 				const status = data._status_map ? data._status_map[column.fieldname] : "";
-				const is_audit = ["Present (Unmarked)", "Present (Requested)", "WFH (Requested)", "Leave (Requested)"].includes(status);
-				
+				const request_view = frappe.query_report.get_filter_value("request");
+
+				// When "Request" is checked, pending/unmarked days are shown as if
+				// already approved: text and styling fall back to the confirmed status.
+				let effective_status = status;
+				let display_value = raw_value;
+				if (request_view) {
+					if (status === "Present (Unmarked)" || status === "Present (Requested)") {
+						effective_status = "Present";
+						display_value = "P";
+					} else if (status === "WFH (Requested)") {
+						effective_status = "Work From Home";
+						display_value = "WFH";
+					} else if (status === "Leave (Requested)") {
+						effective_status = "On Leave";
+						display_value = "L";
+					}
+				}
+
+				const is_audit = ["Present (Unmarked)", "Present (Requested)", "WFH (Requested)", "Leave (Requested)"].includes(effective_status);
+
 				if (raw_value == "HD/P") style = "color:#914EE3";
 				else if (raw_value == "HD/A" || raw_value == "HD") style = "color:#f1c40f";
-				else if (raw_value == "P" || raw_value == "WFH") style = "color:green";
-				else if (raw_value == "P(U)") style = "color:#27ae60; font-style: italic;";
-				else if (raw_value == "P(RQ)") style = "color:#27ae60; font-style: italic;";
-				else if (raw_value == "WFH(RQ)") style = "color:#3187D8; font-style: italic;";
-				else if (raw_value && raw_value.startsWith("L(RQ")) style = "color:#318AD8; font-style: italic;";
-				else if (raw_value == "A") style = "color:red";
-				else if (raw_value && (raw_value == "L" || raw_value.startsWith("L("))) {
-					if (raw_value.includes("PL")) style = "color:#1976d2; font-weight:bold;"; // Deep Blue
-					else if (raw_value.includes("SL")) style = "color:#f4511e; font-weight:bold;"; // Orange
-					else if (raw_value.includes("CL")) style = "color:#00acc1; font-weight:bold;"; // Teal
-					else if (raw_value.includes("CO")) style = "color:#8e24aa; font-weight:bold;"; // Purple
-					else if (raw_value.includes("LWP")) style = "color:#8d6e63; font-weight:bold;"; // Grey/Brown
+				else if (display_value == "P" || display_value == "WFH") style = "color:green";
+				else if (display_value == "P(U)") style = "color:#27ae60; font-style: italic;";
+				else if (display_value == "P(RQ)") style = "color:#27ae60; font-style: italic;";
+				else if (display_value == "WFH(RQ)") style = "color:#3187D8; font-style: italic;";
+				else if (display_value && display_value.startsWith("L(RQ")) style = "color:#318AD8; font-style: italic;";
+				else if (display_value == "A") style = "color:red";
+				else if (display_value && (display_value == "L" || display_value.startsWith("L("))) {
+					if (display_value.includes("PL")) style = "color:#1976d2; font-weight:bold;"; // Deep Blue
+					else if (display_value.includes("SL")) style = "color:#f4511e; font-weight:bold;"; // Orange
+					else if (display_value.includes("CL")) style = "color:#00acc1; font-weight:bold;"; // Teal
+					else if (display_value.includes("CO")) style = "color:#8e24aa; font-weight:bold;"; // Purple
+					else if (display_value.includes("LWP")) style = "color:#8d6e63; font-weight:bold;"; // Grey/Brown
 					else style = "color:#318AD8; font-weight:bold;"; // Default Blue
 				}
 				else if (duration_view && raw_value && raw_value.includes("h ")) {
@@ -252,9 +278,9 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 					
 					inner_html = `<a href="javascript:void(0)" onclick="${onclick_action}" title="${tooltip || ''}" style="${style}; cursor:pointer; text-decoration:none; display:inline-block; position:relative; z-index:2;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${raw_value}</a>`;
 				} else if (tooltip && is_present) {
-					inner_html = `<span title="${tooltip}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${raw_value}</span>`;
+					inner_html = `<span title="${tooltip}" style="${style}; cursor:help; display:inline-block; position:relative; z-index:2;">${display_value}</span>`;
 				} else {
-					inner_html = `<span style="${style}; display:inline-block; position:relative; z-index:2;">${raw_value || ""}</span>`;
+					inner_html = `<span style="${style}; display:inline-block; position:relative; z-index:2;">${display_value || ""}</span>`;
 				}
 
 				// --- WORKLOG DOT INDICATOR ---
@@ -274,7 +300,7 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 					const audit_bg = "#e3f2fd"; // Soft, light blue
 					const wrapper_style = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: ${audit_bg}; display: flex; align-items: center; justify-content: center; z-index: 1;`;
 					value = `<div style="${wrapper_style}">${inner_html}</div>`;
-				} else if (is_duration && (status === "Present" || status === "Work From Home")) {
+				} else if (is_duration && (effective_status === "Present" || effective_status === "Work From Home")) {
 					// Dynamic highlight for Present duration (exclude HD and Audits)
 					let dur_bg = "";
 					const hours = parseInt(raw_value.split("h")[0]) || 0;
