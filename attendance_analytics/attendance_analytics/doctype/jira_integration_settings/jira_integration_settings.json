@@ -17,7 +17,7 @@
    "default": "1",
    "fieldname": "enable_sync",
    "fieldtype": "Check",
-   "label": "Enable Daily Sync (8 AM)"
+   "label": "Enable Daily Sync (8 PM)"
   },
   {
    "fieldname": "cb_1",

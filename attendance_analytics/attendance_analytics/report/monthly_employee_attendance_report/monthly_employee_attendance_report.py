@@ -704,7 +704,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 	- Builds the multi-line tooltip strings.
 	"""
 	total_days = get_dates_in_period(filters)
-	row = {"_details": {}, "_status_map": {}, "_worklogs": {}} # Maps for tooltips, status tracking, and worklog indicators.
+	row = {"_details": {}, "_status_map": {}, "_worklogs": {}, "_pending_leave_type": {}} # Maps for tooltips, status tracking, worklog indicators, and pending-leave-type abbreviations.
 	duration_view = cint(filters.get("duration_view"))
 	
 	for d in total_days:
@@ -798,6 +798,7 @@ def get_attendance_status_for_detailed_view(employee, filters, status_dict, holi
 			pending_lt = emp_leave_apps.get(db_date_str)
 			if pending_lt:
 				abbr = "L(RQ)"
+				row["_pending_leave_type"][date_str] = get_leave_abbr(pending_lt)
 				tooltip_info.insert(0, f"Status: Leave (Requested)\nLeave Type: {pending_lt}")
 
 		if status and "Requested" in str(status) and status != "Leave (Requested)": 
