@@ -167,6 +167,74 @@ frappe.query_reports["Monthly Employee Attendance Report"] = {
 			},
 		});
 	},
+	after_datatable_render: function (datatable) {
+		// Freeze the row-number column, the optional Group By column, and Employee Name
+		// so they stay put while scrolling horizontally through the day/summary columns.
+		const columns = datatable.datamanager.getColumns();
+		const freeze_upto = columns.findIndex((col) => col.id === "employee_name");
+		if (freeze_upto === -1) return;
+
+		let left = 0;
+		for (let i = 0; i <= freeze_upto; i++) {
+			const width = columns[i].width || 0;
+			// z-index is deliberately way above what the formatter uses internally (its
+			// value spans, worklog dots, and audit/duration background overlays go up to
+			// z-index:3) — those inner spans sit on non-frozen cells that don't establish
+			// their own stacking context, so their z-index bubbles up and ties directly
+			// against a frozen cell's z-index at a shared ancestor level. On a tie, DOM
+			// order wins, and later (non-frozen) columns would paint over the frozen ones.
+			datatable.style.setStyle(`.dt-cell--col-${i}`, {
+				position: "sticky",
+				left: `${left}px`,
+				"z-index": "10",
+				background: "var(--dt-cell-bg)",
+				"will-change": "transform",
+			});
+			datatable.style.setStyle(`.dt-cell--header.dt-cell--col-${i}`, {
+				"z-index": "11",
+				background: "var(--dt-header-cell-bg)",
+			});
+			// The filter/search row's cells only carry `.dt-cell--filter`, not
+			// `.dt-cell--header` — without this they'd share the body's z-index and,
+			// being earlier in paint order than the (later-in-DOM) scrolled body rows,
+			// would get visually painted OVER by row text during vertical scroll.
+			datatable.style.setStyle(`.dt-cell--filter.dt-cell--col-${i}`, {
+				"z-index": "11",
+				background: "var(--dt-cell-bg)",
+			});
+			if (i === freeze_upto) {
+				datatable.style.setStyle(`.dt-cell--col-${i}`, {
+					"box-shadow": "2px 0 4px -2px rgba(0, 0, 0, 0.25)",
+				});
+			}
+			left += width;
+		}
+
+		// The header row AND the column filter/search row both live inside the same
+		// `.dt-header` container, which is kept horizontally in sync with the body via
+		// `transform: translateX(-scrollLeft)` on that whole container. That ancestor
+		// transform re-anchors `position: sticky` on its children to itself instead of
+		// the real scroll viewport, so both the frozen header label and the filter input
+		// for that column would drift out of view even though the body cells beneath
+		// them correctly stay put. Counteract it with an equal-and-opposite transform on
+		// every matching cell (header label cell + filter row cell) for each column.
+		if (datatable.bodyScrollable && datatable.header) {
+			if (datatable._frozenHeaderScrollHandler) {
+				datatable.bodyScrollable.removeEventListener("scroll", datatable._frozenHeaderScrollHandler);
+			}
+			const apply_header_freeze = () => {
+				const scroll_left = datatable.bodyScrollable.scrollLeft;
+				for (let i = 0; i <= freeze_upto; i++) {
+					datatable.header.querySelectorAll(`.dt-cell--col-${i}`).forEach((cell) => {
+						cell.style.transform = `translateX(${scroll_left}px)`;
+					});
+				}
+			};
+			datatable._frozenHeaderScrollHandler = () => requestAnimationFrame(apply_header_freeze);
+			datatable.bodyScrollable.addEventListener("scroll", datatable._frozenHeaderScrollHandler);
+			apply_header_freeze();
+		}
+	},
 	formatter: function (value, row, column, data, default_formatter) {
 		value = default_formatter(value, row, column, data);
 		const summarized_view = frappe.query_report.get_filter_value("summarized_view");
